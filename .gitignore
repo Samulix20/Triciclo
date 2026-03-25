@@ -1,0 +1,12 @@
+
+# Build directories
+build
+obj_dir
+__pycache__
+
+# Waveform output
+*.vcd
+
+# Clang linter config
+compile_commands.json
+.cache
