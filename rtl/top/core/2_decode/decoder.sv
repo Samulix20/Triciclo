@@ -25,6 +25,7 @@ always_comb begin
     is_srai = 0;
     // Default signals NOP Setup add x0, x0, 0;
     control = create_nop_ctrl();
+    control.bubble = 0;
 
     unique case(instr.opcode)
         // Load upper imm

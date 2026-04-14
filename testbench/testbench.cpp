@@ -253,8 +253,8 @@ int dpi_mmio(int addr, int data, int op) {
 
         case SERIAL_TX_DATA_ADDR:
             if (is_store) {
-                sf() << char(regdata & 0xFF);
-                if (is_term_it) sf().flush();
+                // sf() << char(regdata & 0xFF);
+                // if (is_term_it) sf().flush();
             }
         break;
 

@@ -259,7 +259,11 @@ always_comb begin
 end
 
 // Count new instruction
-assign instr_ret = (exec_ready & dec_data.control.bubble);
+assign instr_ret = (exec_ready && !dec_data.control.bubble);
+
+always_ff @(posedge clk) begin
+    if (instr_ret) $display("Commits %x", dec_data.pc);
+end
 
 always_comb begin 
     rf_req_reg = current_rf_req;

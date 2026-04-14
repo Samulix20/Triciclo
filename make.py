@@ -25,4 +25,5 @@ if __name__ == "__main__":
 
     #fpga_tests()
 
-    mk.build_and_run_wave("examples/aclint", "build")
+    mk.tb_common_params = "--max-time 500000"
+    mk.build_and_run_wave("examples/cpp_hello_world", "build")
