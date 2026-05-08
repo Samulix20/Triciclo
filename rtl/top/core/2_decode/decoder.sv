@@ -100,8 +100,11 @@ always_comb begin
             control.rf_write = 1;
 
             case (instr.funct7)
-                7'b0000001: begin // Mul extension
-                    control.wb_result_src = WB_MUL;
+                7'b0000001: begin // MulDiv extension
+                    // Div
+                    if (instr.funct3[2]) control.wb_result_src = WB_DIV;
+                    // Mul
+                    else control.wb_result_src = WB_MUL;
                 end
                 default: begin // Base integer instructions
                     control.int_alu_op = int_alu_op_t'({instr.funct7[5], instr.funct3});

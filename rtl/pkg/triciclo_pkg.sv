@@ -260,6 +260,14 @@ typedef enum logic [1:0] {
     MUL_OP_MULHU  = 2'b11
 } mul_op_t /*verilator public*/;
 
+// Div operations
+typedef enum logic [1:0] {
+    DIV_OP_DIV  = 2'b00,
+    DIV_OP_DIVU = 2'b01,
+    DIV_OP_REM  = 2'b10,
+    DIV_OP_REMU = 2'b11
+} div_op_t /*verilator public*/;
+
 /* verilator lint_off UNUSEDSIGNAL */
 function automatic mul_op_t get_mul_op(input rv_instr_t instr);
     return mul_op_t'(instr.funct3[1:0]);
@@ -315,6 +323,7 @@ typedef enum logic [2:0] {
     WB_ALU,
     WB_PC4,
     WB_MUL,
+    WB_DIV,
     WB_LOAD,
     WB_STORE,
     WB_CSR
@@ -382,6 +391,7 @@ typedef enum logic [1:0] {
 } flush_type_t;
 
 typedef struct packed {
+    priv_mode_t current_mode;
     mstatus_t mstatus;
     mie_t mie;
     l32 mtvec;

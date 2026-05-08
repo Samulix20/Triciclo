@@ -97,6 +97,12 @@ int_mul int_mul (
     .set_ops(set_mul_ops), .do_mul(do_mul)
 );
 
+l32 div_result;
+int_div int_div (
+    .op1(reg_data[0]), .op2(reg_data[1]),
+    .opsel(mul_op), .result(div_result)
+);
+
 logic do_branch;
 branch branch (
     .op1(reg_data[0]), .op2(reg_data[1]),
@@ -126,6 +132,7 @@ always_comb begin
         WB_PC4: current_rf_req.data = dec_data.pc4;
         WB_LOAD: current_rf_req.data = fixed_load;
         WB_MUL: current_rf_req.data = mul_result;
+        WB_DIV: current_rf_req.data = div_result;
         WB_CSR: current_rf_req.data = zicsr_reg_result;
         default: current_rf_req.data = int_alu_out;
     endcase
@@ -163,8 +170,9 @@ always_comb begin
         flush_bus.cause = CAUSE_SOFT_IRQ;
     end
     else if (dec_data.control.trap_type == TRAP_ECALL) begin
+        if (trap_conf.current_mode == MODE_MACHINE) flush_bus.cause = CAUSE_MACHINE_ECALL;
+        else flush_bus.cause = CAUSE_USER_ECALL;
         trap = TRAP_ECALL;
-        flush_bus.cause = CAUSE_MACHINE_ECALL;
     end
     else if (dec_data.control.trap_type == TRAP_ILLEGAL) begin
         trap = TRAP_IRQ;
@@ -260,10 +268,6 @@ end
 
 // Count new instruction
 assign instr_ret = (exec_ready && !dec_data.control.bubble);
-
-always_ff @(posedge clk) begin
-    if (instr_ret) $display("Commits %x", dec_data.pc);
-end
 
 always_comb begin 
     rf_req_reg = current_rf_req;

@@ -17,6 +17,7 @@ import triciclo_pkg::*;
     input logic instr_ret
 );
 
+priv_mode_t current_mode;
 mstatus_t mstatus;
 mie_t mie;
 l32 mscratch, mcause, mtval, mtvec, mepc;
@@ -26,6 +27,7 @@ l64 mcycle, minstret;
 /* verilator public_off */
 
 always_comb begin
+    trap_conf.current_mode = current_mode;
     trap_conf.mstatus = mstatus;
     trap_conf.mie = mie;
     trap_conf.mtvec = mtvec;
@@ -63,6 +65,7 @@ end
 always_ff @(posedge clk) begin 
     if (!resetn) begin 
         mie <= 0;
+        current_mode <= MODE_MACHINE;
         // Mstatus reset values
         mstatus.mie <= 0;
         mstatus.mpp <= MODE_MACHINE;
@@ -84,6 +87,7 @@ always_ff @(posedge clk) begin
             if (trap_type == TRAP_MRET) begin
                 mstatus.mie <= mstatus.mpie;
                 mstatus.mpie <= 1;
+                current_mode <= mstatus.mpp;
             end
             // Trap
             else begin
@@ -92,7 +96,8 @@ always_ff @(posedge clk) begin
                 mtval <= flush_bus.value;
                 mstatus.mpie <= mstatus.mie;
                 mstatus.mie <= 0;
-                mstatus.mpp <= MODE_MACHINE;
+                mstatus.mpp <= current_mode;
+                current_mode <= MODE_MACHINE;
             end
         end
         else if (csr_write_req.write_enable) begin
