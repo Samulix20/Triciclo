@@ -9,17 +9,13 @@ obj_dir/.verilator.stamp: \
 	config.mk Makefile rvtarget.h \
 	$(CPP_SRC) $(CPP_HDR) $(FINAL_MODULES)
 
-	${VV} $(FINAL_MODULES) -Irtl/pkg \
+	${VV} -F modules/icb/icb.f -F triciclo.f testbench/sim/top.sv \
 	-Wall --top-module ${TOP_MODULE} \
 	--x-assign unique --x-initial unique $(VTRACE_FLAGS) \
 	--cc -CFLAGS "-I$(PWD) $(CPP_TB_FLAGS) $(CPP_TRACE_FLAG)" \
 	--exe $(CPP_SRC)
 
 	@touch obj_dir/.verilator.stamp
-
-# Lint only
-lint:
-	${VV} -Irtl/pkg --lint-only -Wall $(VERILOG_CORE_MODULES) --top-module ${TOP_MODULE}
 
 # Testing
 test: clean

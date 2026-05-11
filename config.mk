@@ -14,7 +14,7 @@ TARGET_TB = sim
 ifeq ($(TARGET_TB), sim)
 
 export TOP_MODULE := top
-export CPP_SRC := testbench/testbench.cpp
+export CPP_SRC := testbench/sim/testbench.cpp
 
 else
 
@@ -24,13 +24,6 @@ export CPP_SRC := testbench/fpga_tb.cpp
 endif
 
 VERILATED_MODULE := V${TOP_MODULE}
-
-VERILOG_CORE_MODULES := \
-	$(shell find rtl/pkg -name '*.sv') \
-	$(shell find rtl/fpga -name '*.sv') \
-	$(shell find rtl/top -name '*.sv')
-
-FINAL_MODULES := $(VERILOG_CORE_MODULES)
 
 CPP_TB_FLAGS := -march=native -std=c++20 -Wall -Wextra
 

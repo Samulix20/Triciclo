@@ -53,7 +53,6 @@ std::ostream& pf() {
 }
 
 std::ofstream trace_file;
-std::ofstream spike_file;
 
 Vtop *dut;
 u64 sim_time = 0;
@@ -116,163 +115,7 @@ void simulation_exit(i32 exit_code) {
     exit(exit_code);
 }
 
-void mux_addr(u32& addr, u8*& mem_arr, u32& mem_size) {
-    // Bootrom
-    if (addr < DRAM_START_ADDR) {
-        mem_arr = dpi_bootrom_array;
-        mem_size = dpi_bootrom_size;
-        addr -= BOOTROM_START_ADDR;
-    }
-    // DRAM
-    else {
-        mem_arr = dpi_mem_array;
-        mem_size = dpi_mem_size;
-        addr -= DRAM_START_ADDR;
-    }
-}
-
-void dpi_mem_store_byte(int addr, int idx, int data) {
-    
-    u8* mem_arr;
-    u32 mem_size;
-    u32 maddr = addr;
-    mux_addr(maddr, mem_arr, mem_size);
-    
-    if (maddr < mem_size) {
-        u32 aligned_addr = (maddr >> 2) << 2;
-        mem_arr[aligned_addr + idx] = u8(data);
-    }
-}
-
-int dpi_mem_load(int addr) {
-
-    u8* mem_arr;
-    u32 mem_size;
-    u32 maddr = addr;
-    mux_addr(maddr, mem_arr, mem_size);
-
-    if (maddr < mem_size) {
-        return ((u32*) mem_arr)[maddr >> 2];
-    }
-    else return 0;
-}
-
-#ifdef RTL_CACHE
-
-// Simulate cache memory controller
-
-#include "Vtop_cache_wrap__D0.h"
-#include "Vtop_cache_wrap__D1.h"
-
-void request_mux(u32& addr, u32*& wmem, u32& wmem_size) {
-    
-    // Word to byte level addr
-    addr *= 4;
-    
-    // Bootrom
-    if (addr < DRAM_START_ADDR) {
-        wmem = (u32*) dpi_bootrom_array;
-        wmem_size = dpi_bootrom_size / 4;
-        // Go back to word level at 0
-        addr = (addr - BOOTROM_START_ADDR) / 4;
-    }
-    // RAM
-    else {
-        wmem = (u32*) dpi_mem_array;
-        wmem_size = dpi_mem_size / 4;
-        addr = (addr - DRAM_START_ADDR) / 4;
-    }
-}
-
-void dpi_write_mem_block(i32) {
-
-    u32 nwords = dut->top->dcache->BLK_WORDS;
-    u32 addr = dut->top->dcache->o_cm_addr * nwords;
-
-    u32* word_mem;
-    u32 word_mem_size;
-    request_mux(addr, word_mem, word_mem_size);
-
-    for (u32 i = 0; i < nwords; i++) {
-        if (addr + i < word_mem_size) {
-            word_mem[addr + i] = dut->top->dcache->dpi_write_blk[i];
-        }
-    }
-}
-
-void dpi_read_mem_block(i32 dpi_id) {
-    u32* word_mem;
-    u32 word_mem_size;
-
-    if (dpi_id == 0) {
-        u32 nwords = dut->top->dcache->BLK_WORDS;
-        u32 addr = dut->top->dcache->o_cm_addr * nwords;
-        request_mux(addr, word_mem, word_mem_size);
-
-        for (u32 i = 0; i < nwords; i++) {
-            if (addr + i < word_mem_size) {
-                dut->top->dcache->dpi_read_blk[i] = word_mem[addr + i];
-            }
-        }
-    }
-    else if (dpi_id == 1) {
-        u32 nwords = dut->top->icache->BLK_WORDS;
-        u32 addr = dut->top->icache->o_cm_addr * nwords;
-        request_mux(addr, word_mem, word_mem_size);
-
-        for (u32 i = 0; i < nwords; i++) {
-            if (addr + i < word_mem_size) {
-                dut->top->icache->dpi_read_blk[i] = word_mem[addr + i];
-            }
-        }
-    }
-    
-}
-
-#endif
-
 // Simulate peripherals
-
-int dpi_mmio(int addr, int data, int op) {
-
-    u32 regdata = data;
-    u32 uaddr = addr;
-    bool is_load = (op == 1);
-    bool is_store = !is_load;
-
-    switch (uaddr) {
-
-        case EXIT_STATUS_ADDR:
-            if (is_store) simulation_exit(data);
-        break;
-
-        case SERIAL_TX_STATUS_ADDR:
-            // Its ready by default
-            if (is_load) return 1; 
-        break;
-
-        case SERIAL_TX_DATA_ADDR:
-            if (is_store) {
-                // sf() << char(regdata & 0xFF);
-                // if (is_term_it) sf().flush();
-            }
-        break;
-
-        case SERIAL_RX_STATUS_ADDR:
-            if (is_load) return serial_buff.size();
-        break;
-
-        case SERIAL_RX_DATA_ADDR:
-            if (is_load) return pop_serial_buff();
-        break;
-
-        default:
-        break;
-
-    }
-
-    return 0;
-}
 
 void load_elf_segment(std::ifstream& f, std::unique_ptr<Elf32_Phdr>& phdr, u32& size, u8*& arr) {
     // Make sure its loadable
@@ -318,6 +161,76 @@ void load_elf(const std::string filename) {
     f.close();
 }
 
+void icb_dpi_slv_posedge(i32 addr, i32 data, i32 op, i32 wstrbs) {
+    bool is_store = (op == 1);
+    u32 uaddr = u32(addr);
+    u32 udata = u32(data);
+
+    if (is_store) {
+        if (uaddr == EXIT_STATUS_ADDR) {
+            simulation_exit(data);
+        }
+        else if (uaddr == SERIAL_TX_DATA_ADDR) {
+            sf() << char(data & 0xFF);
+        }
+        else if ((uaddr & 0x80000000) == DRAM_START_ADDR) {
+            uaddr -= DRAM_START_ADDR; // Align to 0
+            uaddr = (uaddr >> 2) << 2; // Align to 4B
+            for (int i = 0; i < 4; i++) {
+                if ((wstrbs >> i) & 1) dpi_mem_array[uaddr + i] = u8((udata >> (8 * i)) & 0xFF);
+            }
+        }
+    }
+}
+
+void icb_dpi_slv_comb(i32 addr, i32 data, i32 op, i32 wstrbs, i32* resp_data, u8* err) {
+    bool is_load = (op == 0);
+    u32 uaddr = u32(addr);
+    u32 udata = u32(data);
+
+    *err = 0;
+    *resp_data = 0;
+    
+    if (is_load) {
+    
+        if (uaddr == SERIAL_TX_STATUS_ADDR) {
+            *resp_data = 1;
+        }
+        else if (uaddr == SERIAL_RX_STATUS_ADDR) {
+            *resp_data = serial_buff.size();
+        }   
+        else if (uaddr == SERIAL_RX_DATA_ADDR) {
+            *resp_data = pop_serial_buff();
+        }
+        else if ((uaddr & 0x80000000) == DRAM_START_ADDR) {
+            uaddr -= DRAM_START_ADDR; // Align to 0
+            *resp_data = ((u32*) dpi_mem_array)[uaddr >> 2];
+        }
+    }
+
+}
+
+int dpi_read_word(i32 addr) {
+    u32 uaddr = u32(addr);
+    if (uaddr >= DRAM_START_ADDR) {
+        uaddr -= DRAM_START_ADDR;
+        return ((u32*) dpi_mem_array)[uaddr >> 2];
+    } 
+    else {
+        return 0;
+    }
+}
+
+void dpi_write_byte(i32 addr, i32 i, i32 data) {
+    u32 uaddr = u32(addr);
+    u32 udata = u32(data);
+    if (uaddr >= DRAM_START_ADDR) {
+        uaddr -= DRAM_START_ADDR; // Align to 0
+        uaddr = (uaddr >> 2) << 2; // Align to 4B
+        dpi_mem_array[uaddr + i] = u8((udata >> (8 * i)) & 0xFF);
+    } 
+}
+
 int main(int argc, char** argv) {
     // Evaluate Verilator comand args
     Verilated::commandArgs(argc, argv);
@@ -356,11 +269,6 @@ int main(int argc, char** argv) {
             is_term_it = true;
             std::thread t(terminal_io_thread);
             t.detach();
-        }
-        else if (arg == "--trace-spike") {
-            i++;
-            if (i == argc) break;
-            spike_file.open(argv[i]);
         }
         
     }

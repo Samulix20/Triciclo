@@ -1,5 +1,5 @@
 
-// TODO example for test that divides in 1 cycle
+// Example for test that divides in 1 cycle
 // Non implementable in FPGA
 
 module int_div

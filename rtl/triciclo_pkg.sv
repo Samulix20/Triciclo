@@ -1,11 +1,13 @@
 package triciclo_pkg;
-/* verilator lint_off UNUSEDPARAM */
+import icb_pkg::*;
 
 // Utility functions for parameters
 function int clamp0 (int v);
     if (v < 0) return 0;
     else return v;
 endfunction
+
+/* verilator lint_off UNUSEDPARAM */
 
 // RISC-V Specific definitions
 
@@ -440,52 +442,65 @@ typedef struct packed {
     l32 csr;
 } dec_exec_buff_t;
 
-// Bus definitions
-
-typedef enum logic [2:0] {
-    CBR_NOP,
-    CBR_L,
-    CBR_SB,
-    CBR_SH,
-    CBR_SW
-} cbr_op_t /* verilator public */;
-
-typedef struct packed {
-    l32 addr;
-    l32 data;
-    cbr_op_t op;
-} cbr_req_t /* verilator public */;
-
-typedef struct packed {
-    l32 data;
-    logic done;
-} cbr_res_t /* verilator public */;
-
 // Translate core request to bus requests module as function
 
 function automatic void mem_req_to_bus_req (
     input mem_request_t mem_req, 
-    output cbr_req_t bus_req
+    output logic valid, l32 addr, logic [3:0][7:0] data, logic [3:0] wstrbs, logic[3:0] op 
 );
-    bus_req.addr = mem_req.addr;
-    bus_req.data = mem_req.data;
+    valid = 0;
+    wstrbs = 0;
+    op = ICB_LOAD;
+    addr = mem_req.addr;
+    data = mem_req.data;
 
     case (mem_req.op) 
-        MEM_NOP: begin 
-            bus_req.op = CBR_NOP;
+        MEM_LB, MEM_LH, MEM_LW, MEM_LBU, MEM_LHU: begin 
+            valid = 1;
+            op = ICB_LOAD;
         end
         MEM_SB: begin 
-            bus_req.op = CBR_SB;
+            valid = 1;
+            op = ICB_STORE;
+            case(addr[1:0])
+                2'b00: begin 
+                    wstrbs = 4'b0001;
+                end
+                2'b01: begin
+                    wstrbs = 4'b0010;
+                    data[1] = data[0];
+                end
+                2'b10: begin
+                    wstrbs = 4'b0100;
+                    data[2] = data[0];
+                end
+                2'b11: begin
+                    wstrbs = 4'b1000;
+                    data[3] = data[0];
+                end
+            endcase
         end
         MEM_SH: begin 
-            bus_req.op = CBR_SH;
+            valid = 1;
+            op = ICB_STORE;
+            case(addr[1:0])
+                2'b00: begin 
+                    wstrbs = 4'b0011;
+                end
+                2'b10: begin
+                    wstrbs = 4'b1100;
+                    data[2] = data[0];
+                    data[3] = data[1];
+                end
+                default: wstrbs = 0; // Dont write aligment error
+            endcase
         end
         MEM_SW: begin 
-            bus_req.op = CBR_SW;
+            valid = 1;
+            op = ICB_STORE;
+            wstrbs = 4'b1111;
         end
-        default: begin 
-            bus_req.op = CBR_L;
-        end
+        default: begin end
     endcase
 endfunction
 

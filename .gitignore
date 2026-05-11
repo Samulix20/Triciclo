@@ -1,4 +1,8 @@
 
+# External modules
+modules
+examples/linux
+
 # Build directories
 build
 obj_dir

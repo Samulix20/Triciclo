@@ -19,6 +19,7 @@ import triciclo_pkg::*;
     output rf_write_request_t rf_req_reg,
     // Csr
     output csr_write_request_t csr_req_reg,
+    // Performance Counters
     output logic instr_ret,
 
     // Flush
