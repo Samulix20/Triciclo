@@ -119,8 +119,7 @@ always_comb begin
         OPCODE_STORE: begin
             control.imm = IMM_S;
             control.int_alu_input = ALU_IN_R1_IMM;
-            control.mem_op = mem_op_t'({1'b1, instr.funct3});
-            control.wb_result_src = WB_STORE;
+            control.mem_op = mem_op_t'({1'b01, instr.funct3});
         end
 
         // Load
@@ -129,7 +128,7 @@ always_comb begin
         OPCODE_LOAD: begin
             control.imm = IMM_I;
             control.int_alu_input = ALU_IN_R1_IMM;
-            control.mem_op = mem_op_t'({1'b0, instr.funct3});
+            control.mem_op = mem_op_t'({1'b00, instr.funct3});
             control.wb_result_src = WB_LOAD;
             control.rf_write = 1;
         end
@@ -162,34 +161,25 @@ always_comb begin
         end
 
         OPCODE_BARRIER: begin 
-            // Behaves as NOP but does not cause a TRAP 
+            // Check for fence.i, must flush the pipeline, jump to pc+4
+            if (instr.funct3 == 3'b001) begin 
+                control.fencei = 1;
+            end
+            else begin 
+                // Behaves as NOP but does not cause a TRAP 
+            end
         end
 
         OPCODE_AMO: begin 
             if (instr.funct3 == 3'b010) begin
-                // LR.W
-                if (instr.funct7[6:2] == 5'b00010) begin 
-                    // RS1 used as address directly
-                    control.int_alu_input = ALU_IN_R1_IMM;
-                    control.imm = IMM_0;
-                    control.mem_op = MEM_LW;
-                    control.amo_op = AMO_LR;
-                    control.wb_result_src = WB_LOAD;
-                    control.rf_write = 1;
-                end
-                // SC.W
-                else if (instr.funct7[6:2] == 5'b00011) begin 
-                    // RS1 used as address directly
-                    control.int_alu_input = ALU_IN_R1_IMM;
-                    control.imm = IMM_0;
-                    control.mem_op = MEM_SW;
-                    control.amo_op = AMO_SC;
-                    control.wb_result_src = WB_STORE;
-                    control.rf_write = 1;
-                end
-                else begin 
-                    control.trap_type = TRAP_ILLEGAL;
-                end
+                // RS1 used as address directly
+                control.int_alu_input = ALU_IN_R1_IMM;
+                control.wb_result_src = WB_LOAD;
+                control.imm = IMM_0;
+                control.rf_write = 1;
+                control.mem_op = mem_op_t'({1'b1, instr.funct7[6:2]});
+                control.is_amo = 1;
+                // TODO check invalid AMO funct7
             end
             else begin 
                 control.trap_type = TRAP_ILLEGAL;

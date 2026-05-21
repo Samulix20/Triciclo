@@ -15,9 +15,6 @@ import triciclo_pkg::*;
 
 always_comb begin
     case (op)
-        MEM_LW: begin
-            fixed_load = raw_load;
-        end
         MEM_LB: begin
             case(addr[1:0])
                 0: fixed_load[7:0] = raw_load[7:0];
@@ -55,7 +52,7 @@ always_comb begin
             fixed_load[31:16] = 0;
         end
         default: begin
-            fixed_load = 0;
+            fixed_load = raw_load;
         end
     endcase
 end

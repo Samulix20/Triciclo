@@ -37,7 +37,7 @@ export RV_DMP := $(RV_CROSS)objdump
 
 export BSP_DIR := bsp
 
-export ARCH_FLAGS := -march=rv32im_zicsr -mabi=ilp32
+export ARCH_FLAGS := -march=rv32ima_zicsr_zifencei -mabi=ilp32
 
 export INCLUDE_FLAGS := -I$(BSP_DIR) -I.
 

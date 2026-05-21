@@ -295,29 +295,28 @@ typedef enum logic [3:0] {
     OP_NOP = 4'b1111
 } branch_op_t /*verilator public*/;
 
-typedef enum logic [3:0] {
-    MEM_LB = 4'b0000,
-    MEM_LH = 4'b0001,
-    MEM_LW = 4'b0010,
-    MEM_LBU = 4'b0100,
-    MEM_LHU = 4'b0101,
-    MEM_SB = 4'b1000,
-    MEM_SH = 4'b1001,
-    MEM_SW = 4'b1010,
-    MEM_NOP = 4'b1111
+typedef enum logic [5:0] {
+    MEM_LB =    6'b000000,
+    MEM_LH =    6'b000001,
+    MEM_LW =    6'b000010,
+    MEM_LBU =   6'b000100,
+    MEM_LHU =   6'b000101,
+    MEM_SB =    6'b001000,
+    MEM_SH =    6'b001001,
+    MEM_SW =    6'b001010,
+    MEM_NOP =   6'b001111,
+    AMO_LR =    6'b100010,
+    AMO_SC =    6'b100011,
+    AMO_SWAP =  6'b100001,
+    AMO_ADD =   6'b100000,
+    AMO_XOR =   6'b100100,
+    AMO_AND =   6'b101100,
+    AMO_OR =    6'b101000,
+    AMO_MIN =   6'b110000,
+    AMO_MAX =   6'b110100,
+    AMO_MINU =  6'b111000,
+    AMO_MAXU =  6'b111100
 } mem_op_t /*verilator public*/;
-
-/* verilator lint_off UNUSEDSIGNAL */
-function automatic logic is_mem_store(input mem_op_t op);
-    return op[3];
-endfunction
-/* verilator lint_on UNUSEDSIGNAL */
-
-typedef enum logic [1:0] {
-    AMO_NOP,
-    AMO_LR,
-    AMO_SC
-} amo_op_t;
 
 typedef enum logic [2:0] {
     // Standard outputs
@@ -347,6 +346,8 @@ typedef enum logic [3:0] {
 typedef struct packed {
     // Is bubble
     logic bubble;
+    // Is Fence.i
+    logic fencei;
     // Immediate generation
     imm_t imm;
     // Branch
@@ -356,6 +357,7 @@ typedef struct packed {
     int_alu_input_t int_alu_input;
     // Memory
     mem_op_t mem_op;
+    logic is_amo;
     // Writeback source
     wb_result_t wb_result_src;
     // Final Writeback
@@ -364,8 +366,6 @@ typedef struct packed {
     logic csr_write;
     // Trap / Exception detection
     trap_type_t trap_type;
-    // Atomic operations
-    amo_op_t amo_op;
 } control_t /*verilator public*/;
 
 // Used for NOP generation
@@ -373,11 +373,12 @@ function automatic control_t create_nop_ctrl();
     control_t instr;
     instr.bubble = 1;
     instr.imm = IMM_0;
+    instr.fencei = 0;
     instr.branch_op = OP_NOP;
     instr.int_alu_op = ALU_OP_ADD;
     instr.int_alu_input = ALU_IN_R1_R2;
     instr.mem_op = MEM_NOP;
-    instr.amo_op = AMO_NOP;
+    instr.is_amo = 0;
     instr.wb_result_src = WB_ALU;
     instr.rf_write = 0;
     instr.csr_write = 0;
@@ -455,7 +456,7 @@ function automatic void mem_req_to_bus_req (
     data = mem_req.data;
 
     case (mem_req.op) 
-        MEM_LB, MEM_LH, MEM_LW, MEM_LBU, MEM_LHU: begin 
+        MEM_LB, MEM_LH, MEM_LW, MEM_LBU, MEM_LHU, AMO_LR: begin 
             valid = 1;
             op = ICB_LOAD;
         end
@@ -495,13 +496,55 @@ function automatic void mem_req_to_bus_req (
                 default: wstrbs = 0; // Dont write aligment error
             endcase
         end
-        MEM_SW: begin 
+        MEM_SW, AMO_SC: begin 
             valid = 1;
             op = ICB_STORE;
             wstrbs = 4'b1111;
         end
+        AMO_SWAP: begin 
+            valid = 1;
+            op = ICB_AMO_SWAP;
+        end
+        AMO_ADD: begin 
+            valid = 1;
+            op = ICB_AMO_ADD;
+        end
+        AMO_XOR: begin 
+            valid = 1;
+            op = ICB_AMO_XOR;
+        end
+        AMO_AND: begin 
+            valid = 1;
+            op = ICB_AMO_AND;
+        end
+        AMO_OR: begin 
+            valid = 1;
+            op = ICB_AMO_OR;
+        end
+        AMO_MIN: begin 
+            valid = 1;
+            op = ICB_AMO_MIN;
+        end
+        AMO_MAX: begin 
+            valid = 1;
+            op = ICB_AMO_MAX;
+        end
+        AMO_MAXU: begin 
+            valid = 1;
+            op = ICB_AMO_MAXU;
+        end
+        AMO_MINU: begin 
+            valid = 1;
+            op = ICB_AMO_MINU;
+        end
         default: begin end
     endcase
+endfunction
+
+function automatic logic is_store(input logic is_amo, mem_op_t mem_op);
+    if (mem_op == MEM_NOP) return 0;
+    else if (is_amo) return mem_op != AMO_LR;
+    else return mem_op[3];
 endfunction
 
 endpackage

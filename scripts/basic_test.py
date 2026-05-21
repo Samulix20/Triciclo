@@ -10,7 +10,7 @@ NC='\033[0m'
 
 isa_test_path = "test/isa_tests"
 isa_macros_path = f"{isa_test_path}/macros"
-test_groups_list = ["base", "rv32ui", "rv32mul", "rv32div", "rv32zicsr"]
+test_groups_list = ["base", "rv32ui", "rv32mul", "rv32div", "rv32amo", "rv32lrsc", "rv32zicsr"]
 
 isa_test_buildir = "build/isa_tests"
 exe_path = f"{isa_test_buildir}/test.elf"

@@ -40,6 +40,14 @@ typedef enum logic [2:0] {
 } state_t;
 state_t state, next_state;
 
+// LR/SC Reserver Addr
+l32 reserved_addr;
+logic reserved_addr_valid;
+
+// Temporal inputs
+logic valid_write;
+l32 write_addr;
+
 // Bypass last write
 l32 [CORE_RF_NUM_READ - 1:0] reg_data;
 rv_reg_id_t [CORE_RF_NUM_READ - 1:0] rf_read_ids;
@@ -119,6 +127,34 @@ load_fix load_fix (
     .fixed_load(fixed_load)
 );
 
+logic sc_error, sc_ok;
+
+// Memory request
+always_comb begin 
+    // These are just comb paths
+    data_req.addr = request_addr;
+    data_req.data = request_data;
+    data_req.op = MEM_NOP;
+    sc_error = 0;
+    sc_ok = 0;
+
+    if (state == MEM_ADDR || state == MEM_WAIT) begin
+        // Check if SC can store
+        if (dec_data.control.mem_op == AMO_SC) begin 
+            if (!reserved_addr_valid) sc_error = 1;
+            else if (data_req.addr != reserved_addr) sc_error = 1;
+            else sc_ok = 1;
+        end
+    end
+
+    // Send the data request
+    if (state == MEM_ADDR) begin
+        data_req.op = dec_data.control.mem_op;
+        // Dont send stores on sc_error
+        if (sc_error) data_req.op = MEM_NOP;
+    end
+end
+
 csr_write_request_t current_csr_req;
 rf_write_request_t current_rf_req;
 always_comb begin
@@ -131,23 +167,16 @@ always_comb begin
     case (dec_data.control.wb_result_src)
         WB_IMM: current_rf_req.data = dec_data.imm;
         WB_PC4: current_rf_req.data = dec_data.pc4;
-        WB_LOAD: current_rf_req.data = fixed_load;
         WB_MUL: current_rf_req.data = mul_result;
         WB_DIV: current_rf_req.data = div_result;
         WB_CSR: current_rf_req.data = zicsr_reg_result;
+        WB_LOAD: begin 
+            if (sc_error) current_rf_req.data = 1; 
+            else if (sc_ok) current_rf_req.data = 0; 
+            else current_rf_req.data = fixed_load; 
+        end
         default: current_rf_req.data = int_alu_out;
     endcase
-end
-
-// Memory request
-always_comb begin 
-    // These are just comb paths
-    data_req.addr = request_addr;
-    data_req.data = request_data;
-
-    // Send the data request
-    if (state == MEM_ADDR) data_req.op = dec_data.control.mem_op;
-    else data_req.op = MEM_NOP;
 end
 
 // Check for traps
@@ -185,6 +214,7 @@ always_comb begin
 
     if (trap == TRAP_MRET) flush_bus.to = trap_conf.mepc;
     else if (trap != NO_TRAP) flush_bus.to = trap_conf.mtvec;
+    else if (dec_data.control.fencei) flush_bus.to = dec_data.pc4; 
     else flush_bus.to = int_alu_out;
 end
 
@@ -216,33 +246,27 @@ always_comb begin
                     set_mul_ops = 1;
                     next_state = MUL_BEGIN;
                 end
-                // Branch instruction
-                else if (do_branch) begin 
-                    exec_ready = 1;
-                    flush_bus.op = FLUSH_BRANCH;
-                    current_rf_req.write_enable = dec_data.control.rf_write;
-                end
                 // Other 1 cycle instructions
                 else begin 
                     exec_ready = 1;
                     current_rf_req.write_enable = dec_data.control.rf_write;
                     current_csr_req.write_enable = dec_data.control.csr_write;
+                    // Jumps and Fence.i flush the pipeline
+                    if (do_branch || dec_data.control.fencei) flush_bus.op = FLUSH_BRANCH;
                 end
             end
         end
 
         MEM_ADDR: begin
-            // Memory accepts operation
-            if (data_req_ack) begin 
-                // Dont need to wait for stores
-                if(is_mem_store(dec_data.control.mem_op)) begin
-                    exec_ready = 1;
-                    next_state = IDLE;
-                end
-                // Wait for the load data
-                else begin 
-                    next_state = MEM_WAIT;
-                end
+            // Memory accepts operation or SC error
+            if (sc_error) begin
+                current_rf_req.write_enable = dec_data.control.rf_write; 
+                exec_ready = 1;
+                next_state = IDLE;
+            end
+            else if (data_req_ack) begin 
+                // Wait for the response from memory
+                next_state = MEM_WAIT;
             end
         end
         MEM_WAIT: begin 
@@ -276,15 +300,33 @@ always_comb begin
 end
 
 always_ff @(posedge clk) begin
-    if (!resetn) state <= IDLE;
-    else state <= next_state;
-end
+    if (!resetn) begin 
+        state <= IDLE;
+        reserved_addr_valid <= 0;
+    end
+    else begin
+        // State machine
+        state <= next_state;
+        
+        // Clear reservation
+        if (is_store(dec_data.control.is_amo, data_req.op) && reserved_addr == data_req.addr && !sc_ok) begin 
+            reserved_addr_valid <= 0;
+        end
+        // Also invalidate on sc_ok ending
+        else if (sc_ok && exec_ready) begin 
+            reserved_addr_valid <= 0;
+        end
 
-// Data request Bus
-always_ff @(posedge clk) begin
-    if (store_mem_req) begin
-        request_addr <= int_alu_out;
-        request_data <= reg_data[1];
+        if (store_mem_req) begin
+            request_addr <= int_alu_out;
+            request_data <= reg_data[1];
+
+            if (dec_data.control.mem_op == AMO_LR) begin 
+                reserved_addr_valid <= 1;
+                reserved_addr <= int_alu_out;
+            end
+        end
+
     end
 end
 

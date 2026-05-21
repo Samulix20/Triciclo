@@ -91,6 +91,15 @@ fail_loop: \
 .section .data; \
 .align 4;
 
+
+// Add some empty defines
+
+#define TEST_DATA
+#define RVTEST_DATA_END
+
+#define RVTEST_CODE_END
+
 #define mbadaddr mtval
+
 
 #endif
