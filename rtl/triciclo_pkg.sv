@@ -541,7 +541,8 @@ function automatic void mem_req_to_bus_req (
     endcase
 endfunction
 
-function automatic logic is_store(input logic is_amo, mem_op_t mem_op);
+function automatic logic is_store(mem_op_t mem_op);
+    logic is_amo = mem_op[5];
     if (mem_op == MEM_NOP) return 0;
     else if (is_amo) return mem_op != AMO_LR;
     else return mem_op[3];

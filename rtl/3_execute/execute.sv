@@ -40,10 +40,6 @@ typedef enum logic [2:0] {
 } state_t;
 state_t state, next_state;
 
-// LR/SC Reserver Addr
-l32 reserved_addr;
-logic reserved_addr_valid;
-
 // Temporal inputs
 logic valid_write;
 l32 write_addr;
@@ -119,41 +115,22 @@ branch branch (
     .do_branch(do_branch)
 );
 
-l32 request_addr, request_data, fixed_load;
-logic store_mem_req;
-load_fix load_fix (
-    .op(dec_data.control.mem_op), 
-    .addr(request_addr), .raw_load(mem_data),
-    .fixed_load(fixed_load)
-);
+mem_request_t lsu_req;
+logic lsu_start, lsu_ending;
+l32 lsu_data;
 
-logic sc_error, sc_ok;
-
-// Memory request
 always_comb begin 
-    // These are just comb paths
-    data_req.addr = request_addr;
-    data_req.data = request_data;
-    data_req.op = MEM_NOP;
-    sc_error = 0;
-    sc_ok = 0;
-
-    if (state == MEM_ADDR || state == MEM_WAIT) begin
-        // Check if SC can store
-        if (dec_data.control.mem_op == AMO_SC) begin 
-            if (!reserved_addr_valid) sc_error = 1;
-            else if (data_req.addr != reserved_addr) sc_error = 1;
-            else sc_ok = 1;
-        end
-    end
-
-    // Send the data request
-    if (state == MEM_ADDR) begin
-        data_req.op = dec_data.control.mem_op;
-        // Dont send stores on sc_error
-        if (sc_error) data_req.op = MEM_NOP;
-    end
+    lsu_req.addr = int_alu_out;
+    lsu_req.data = reg_data[1];
+    lsu_req.op = dec_data.control.mem_op;
 end
+ls_unit lsu (
+    .clk(clk), .resetn(resetn),
+    .data_req(data_req), .data_req_ack(data_req_ack),
+    .data_resp_data(mem_data), .data_resp_valid(data_req_done),
+    .start(lsu_start), .ending(lsu_ending),
+    .input_data_req(lsu_req), .out_data(lsu_data)
+);
 
 csr_write_request_t current_csr_req;
 rf_write_request_t current_rf_req;
@@ -170,11 +147,7 @@ always_comb begin
         WB_MUL: current_rf_req.data = mul_result;
         WB_DIV: current_rf_req.data = div_result;
         WB_CSR: current_rf_req.data = zicsr_reg_result;
-        WB_LOAD: begin 
-            if (sc_error) current_rf_req.data = 1; 
-            else if (sc_ok) current_rf_req.data = 0; 
-            else current_rf_req.data = fixed_load; 
-        end
+        WB_LOAD: current_rf_req.data = lsu_data; 
         default: current_rf_req.data = int_alu_out;
     endcase
 end
@@ -228,7 +201,7 @@ always_comb begin
     exec_ready = 0;
     set_mul_ops = 0; 
     do_mul = 0;
-    store_mem_req = 0;
+    lsu_start = 0;
 
     case (state)
         IDLE: begin
@@ -238,8 +211,8 @@ always_comb begin
                 end
                 // Memory instructions
                 else if (dec_data.control.mem_op != MEM_NOP) begin 
-                    store_mem_req = 1;
-                    next_state = MEM_ADDR;
+                    lsu_start = 1;
+                    next_state = MEM_WAIT;
                 end
                 // Multiplication instructions, multicycle
                 else if (dec_data.control.wb_result_src == WB_MUL) begin 
@@ -257,20 +230,8 @@ always_comb begin
             end
         end
 
-        MEM_ADDR: begin
-            // Memory accepts operation or SC error
-            if (sc_error) begin
-                current_rf_req.write_enable = dec_data.control.rf_write; 
-                exec_ready = 1;
-                next_state = IDLE;
-            end
-            else if (data_req_ack) begin 
-                // Wait for the response from memory
-                next_state = MEM_WAIT;
-            end
-        end
         MEM_WAIT: begin 
-            if (data_req_done) begin 
+            if (lsu_ending) begin 
                 current_rf_req.write_enable = dec_data.control.rf_write;
                 exec_ready = 1;
                 next_state = IDLE;
@@ -300,34 +261,8 @@ always_comb begin
 end
 
 always_ff @(posedge clk) begin
-    if (!resetn) begin 
-        state <= IDLE;
-        reserved_addr_valid <= 0;
-    end
-    else begin
-        // State machine
-        state <= next_state;
-        
-        // Clear reservation
-        if (is_store(dec_data.control.is_amo, data_req.op) && reserved_addr == data_req.addr && !sc_ok) begin 
-            reserved_addr_valid <= 0;
-        end
-        // Also invalidate on sc_ok ending
-        else if (sc_ok && exec_ready) begin 
-            reserved_addr_valid <= 0;
-        end
-
-        if (store_mem_req) begin
-            request_addr <= int_alu_out;
-            request_data <= reg_data[1];
-
-            if (dec_data.control.mem_op == AMO_LR) begin 
-                reserved_addr_valid <= 1;
-                reserved_addr <= int_alu_out;
-            end
-        end
-
-    end
+    if (!resetn) state <= IDLE;
+    else state <= next_state;
 end
 
 endmodule

@@ -1,0 +1,111 @@
+module ls_unit
+import triciclo_pkg::*;
+(
+    input logic clk, resetn,
+
+    // Memory interface
+    output mem_request_t data_req,
+    input logic data_req_ack,
+    input l32 data_resp_data,
+    input logic data_resp_valid,
+
+    // Control
+    input logic start,
+    input mem_request_t input_data_req,
+    output logic ending,
+    output l32 out_data
+);
+
+typedef enum logic [1:0] {IDLE, WAIT_REQ_RDY, WAIT_DATA_VALID} state_t;
+state_t state, next_state;
+
+always_ff @(posedge clk) begin
+    if (!resetn) state <= IDLE;
+    else state <= next_state;
+end
+
+logic store_mem_req;
+mem_request_t internal_req;
+
+always_ff @(posedge clk) begin 
+    if (!resetn) reserved_addr_valid <= 0;
+    else if (store_mem_req) internal_req <= input_data_req;
+end
+
+l32 reserved_addr;
+logic clear_reserved_addr, set_reserved_addr, reserved_addr_valid, sc_error;
+
+always_ff @(posedge clk) begin
+    if (!resetn || clear_reserved_addr) begin 
+        reserved_addr_valid <= 0;
+    end
+    else if (set_reserved_addr) begin 
+        reserved_addr_valid <= 1;
+        reserved_addr <= internal_req.addr;
+    end
+end
+
+l32 fixed_load;
+load_fix load_fix (
+    .op(internal_req.op), 
+    .addr(internal_req.addr),
+    .raw_load(data_resp_data),
+    .fixed_load(fixed_load)
+);
+
+// Control op
+always_comb begin 
+    data_req = internal_req;
+    data_req.op = MEM_NOP;
+
+    sc_error = 0;
+
+    if (state == WAIT_REQ_RDY) begin 
+        if (internal_req.op == AMO_SC) begin 
+            if (!reserved_addr_valid) sc_error = 1;
+            else if (internal_req.addr != reserved_addr) sc_error = 1;
+        end
+
+        if (!sc_error) data_req.op = internal_req.op;
+    end
+end
+
+always_comb begin
+    next_state = state;
+    ending = 0;
+    store_mem_req = 0;
+    set_reserved_addr = 0;
+    out_data = fixed_load;
+
+    case (state)
+        IDLE: begin 
+            if (start) begin 
+                next_state = WAIT_REQ_RDY;
+                store_mem_req = 1;
+            end 
+        end
+        WAIT_REQ_RDY: begin 
+            if (sc_error) begin 
+                next_state = IDLE;
+                ending = 1;
+                out_data = 1;
+            end
+            else if (data_req_ack) begin
+                next_state = WAIT_DATA_VALID;
+            end
+        end
+        WAIT_DATA_VALID: begin 
+            if (data_resp_valid) begin 
+                next_state = IDLE;
+                ending = 1;
+    
+                if (internal_req.op == AMO_LR) set_reserved_addr = 1;
+                if (is_store(internal_req.op) && reserved_addr == internal_req.addr) clear_reserved_addr = 1;
+            end
+        end
+        default: begin end
+    endcase
+
+end
+
+endmodule

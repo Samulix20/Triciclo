@@ -1,4 +1,5 @@
 
+#include <ios>
 #include <iostream>
 #include <string>
 #include <fstream>
@@ -161,6 +162,30 @@ void load_elf(const std::string filename) {
     f.close();
 }
 
+void load_bin(const std::string& filename) {
+    std::ifstream file(filename, std::ios::binary | std::ios::ate);
+
+    if (!file.is_open()) {
+        std::cerr << "ERROR: Could not open binary file: " << filename << std::endl;
+        exit(-1);
+    }
+
+    std::streamsize size = file.tellg();
+    file.seekg(0, std::ios::beg);
+
+    dpi_mem_size = 5 * 1024 * 1024; // 5 MB size
+    if (size > dpi_mem_size) {
+        std::cerr << "ERROR: Binary file " << filename << " (" << size << " bytes) exceeds memory size (" << dpi_mem_size << " bytes)" << std::endl;
+        exit(-1);
+    }
+
+    dpi_mem_array = new u8[dpi_mem_size];
+
+    file.read(reinterpret_cast<char*>(dpi_mem_array), size);
+    file.close();
+}
+
+
 void icb_dpi_slv_posedge(i32 addr, i32 data, i32 op, i32 wstrbs) {
     bool is_store = (op == 1);
     u32 uaddr = u32(addr);
@@ -204,6 +229,12 @@ void icb_dpi_slv_comb(i32 addr, i32 data, i32 op, i32 wstrbs, i32* resp_data, u8
         }
         else if ((uaddr & 0x80000000) == DRAM_START_ADDR) {
             uaddr -= DRAM_START_ADDR; // Align to 0
+
+            if (uaddr > dpi_mem_size) {
+                std::cout << "Slv Comb, Out of bounds addr " << uaddr << "/" << dpi_mem_size << "\n";
+                simulation_exit(-1);
+            }
+
             *resp_data = ((u32*) dpi_mem_array)[uaddr >> 2];
         }
     }
@@ -214,6 +245,12 @@ int dpi_read_word(i32 addr) {
     u32 uaddr = u32(addr);
     if (uaddr >= DRAM_START_ADDR) {
         uaddr -= DRAM_START_ADDR;
+
+        if (uaddr > dpi_mem_size) {
+            std::cout << "Read, Out of bounds addr " << uaddr << "/" << dpi_mem_size << "\n";
+            simulation_exit(-1);
+        }
+
         return ((u32*) dpi_mem_array)[uaddr >> 2];
     } 
     else {
@@ -227,7 +264,14 @@ void dpi_write_byte(i32 addr, i32 i, i32 data) {
     if (uaddr >= DRAM_START_ADDR) {
         uaddr -= DRAM_START_ADDR; // Align to 0
         uaddr = (uaddr >> 2) << 2; // Align to 4B
-        dpi_mem_array[uaddr + i] = u8((udata >> (8 * i)) & 0xFF);
+        uaddr += i;
+
+        if (uaddr > dpi_mem_size) {
+            std::cout << "Write, Out of bounds addr " << uaddr << "/" << dpi_mem_size << "\n";
+            simulation_exit(-1);
+        }
+
+        dpi_mem_array[uaddr] = u8((udata >> (8 * i)) & 0xFF);
     } 
 }
 
@@ -235,7 +279,6 @@ int main(int argc, char** argv) {
     // Evaluate Verilator comand args
     Verilated::commandArgs(argc, argv);
 
-    std::string elf_path;
     u64 max_sim_time = 0;
 
     // Evaluate our command args
@@ -245,7 +288,12 @@ int main(int argc, char** argv) {
         if (arg == "-e") {
             i++;
             if (i == argc) break;
-            elf_path = argv[i];
+            load_elf(argv[i]);
+        }
+        else if (arg == "-b") {
+            i++;
+            if (i == argc) break;
+            load_bin(argv[i]);
         }
         else if (arg == "--max-time") {
             i++;
@@ -274,7 +322,6 @@ int main(int argc, char** argv) {
     }
 
     dut = new Vtop;
-    load_elf(elf_path);
 
     #ifdef TRACE_WAVE
         // trace signals 5 levels under dut
