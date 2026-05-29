@@ -27,17 +27,10 @@ import triciclo_pkg::*;
 
     // Traps
     input logic mtip, msip, meip,
-    input trap_config_t trap_conf,
-    output trap_type_t trap
+    input trap_config_t trap_conf
 );
 
-typedef enum logic [2:0] {
-    IDLE,
-    MEM_ADDR,
-    MEM_WAIT,
-    MUL_BEGIN,
-    MUL_END
-} state_t;
+typedef enum logic [2:0] {IDLE, MEM_WAIT, MUL_BEGIN, MUL_END} state_t;
 state_t state, next_state;
 
 // Temporal inputs
@@ -152,44 +145,14 @@ always_comb begin
     endcase
 end
 
-// Check for traps
-always_comb begin
-    flush_bus.from = dec_data.pc;
-    flush_bus.cause = 0;
-    flush_bus.value = 0;
-    trap = NO_TRAP;
+logic trap;
+flush_bus_t trap_flush_bus;
 
-    // IRQ
-    if (meip && trap_conf.mstatus.mie && trap_conf.mie.meie) begin
-        trap = TRAP_IRQ;
-        flush_bus.cause = CAUSE_EXT_IRQ;
-    end
-    else if (mtip && trap_conf.mstatus.mie && trap_conf.mie.mtie) begin 
-        trap = TRAP_IRQ;
-        flush_bus.cause = CAUSE_TIMER_IRQ;
-    end
-    else if (msip && trap_conf.mstatus.mie && trap_conf.mie.msie) begin 
-        trap = TRAP_IRQ;
-        flush_bus.cause = CAUSE_SOFT_IRQ;
-    end
-    else if (dec_data.control.trap_type == TRAP_ECALL) begin
-        if (trap_conf.current_mode == MODE_MACHINE) flush_bus.cause = CAUSE_MACHINE_ECALL;
-        else flush_bus.cause = CAUSE_USER_ECALL;
-        trap = TRAP_ECALL;
-    end
-    else if (dec_data.control.trap_type == TRAP_ILLEGAL) begin
-        trap = TRAP_IRQ;
-        flush_bus.cause = CAUSE_ILLEGAL_INSTRUCTION;
-    end
-    else if (dec_data.control.trap_type == TRAP_MRET) begin
-        trap = TRAP_MRET;
-    end
-
-    if (trap == TRAP_MRET) flush_bus.to = trap_conf.mepc;
-    else if (trap != NO_TRAP) flush_bus.to = trap_conf.mtvec;
-    else if (dec_data.control.fencei) flush_bus.to = dec_data.pc4; 
-    else flush_bus.to = int_alu_out;
-end
+trap_unit trap_unit (
+    .mtip(mtip), .msip(msip), .meip(meip),
+    .dec_data(dec_data), .trap_conf(trap_conf),
+    .trap(trap), .flush_bus(trap_flush_bus)
+);
 
 always_comb begin
     next_state = state;
@@ -203,11 +166,17 @@ always_comb begin
     do_mul = 0;
     lsu_start = 0;
 
+    // Flush Targets
+    flush_bus.from = dec_data.pc;
+    flush_bus.to = int_alu_out;
+    flush_bus.cause = 0;
+    flush_bus.value = 0;
+
     case (state)
         IDLE: begin
             if (enable) begin
-                if (trap != NO_TRAP) begin 
-                    flush_bus.op = FLUSH_TRAP;
+                if (trap) begin 
+                    flush_bus = trap_flush_bus;
                 end
                 // Memory instructions
                 else if (dec_data.control.mem_op != MEM_NOP) begin 
@@ -226,6 +195,7 @@ always_comb begin
                     current_csr_req.write_enable = dec_data.control.csr_write;
                     // Jumps and Fence.i flush the pipeline
                     if (do_branch || dec_data.control.fencei) flush_bus.op = FLUSH_BRANCH;
+                    if (dec_data.control.fencei) flush_bus.to = dec_data.pc4;  
                 end
             end
         end

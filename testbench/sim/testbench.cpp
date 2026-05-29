@@ -58,22 +58,26 @@ std::ofstream trace_file;
 Vtop *dut;
 u64 sim_time = 0;
 
-bool is_term_it = false;
+bool do_echo = false;
+bool io_thread_started = false;
 std::mutex serial_buff_mtx;
 std::queue<u8> serial_buff;
 
 void terminal_io_thread() {
-    // Config non-block, no echo, 1 char blocking terminal
-    struct termios attr;
-    tcgetattr(STDIN_FILENO, &attr);
-    attr.c_lflag &= ~(ICANON | ECHO);
-    attr.c_cc[VMIN] = 1;
-    tcsetattr(STDIN_FILENO, TCSANOW, &attr);
+    // Config no echo, 1 char blocking terminal
+    if (!do_echo) {
+        struct termios attr;
+        tcgetattr(STDIN_FILENO, &attr);
+        attr.c_lflag &= ~(ICANON | ECHO);
+        attr.c_cc[VMIN] = 1;
+        tcsetattr(STDIN_FILENO, TCSANOW, &attr);
+    }
 
-    u8 term_buff[20];
+    const u32 buff_size = 125;
+    u8 term_buff[buff_size];
 
     while(1) {
-        i32 bytes_read = read(STDIN_FILENO, term_buff, 20);
+        i32 bytes_read = read(STDIN_FILENO, term_buff, buff_size);
 
         for (i32 i = 0; i < bytes_read; i++) {
             u8 c = term_buff[i];
@@ -86,18 +90,6 @@ void terminal_io_thread() {
             serial_buff_mtx.unlock();
         }
     }
-}
-
-u8 pop_serial_buff() {
-    if (serial_buff.empty()) return 0;
-
-    u8 r = serial_buff.front();
-
-    serial_buff_mtx.lock();
-    serial_buff.pop();
-    serial_buff_mtx.unlock();
-
-    return r;
 }
 
 void simulation_exit(i32 exit_code) {
@@ -173,7 +165,7 @@ void load_bin(const std::string& filename) {
     std::streamsize size = file.tellg();
     file.seekg(0, std::ios::beg);
 
-    dpi_mem_size = 5 * 1024 * 1024; // 5 MB size
+    dpi_mem_size = 50 * 1024 * 1024; // 50 MB size
     if (size > dpi_mem_size) {
         std::cerr << "ERROR: Binary file " << filename << " (" << size << " bytes) exceeds memory size (" << dpi_mem_size << " bytes)" << std::endl;
         exit(-1);
@@ -185,7 +177,6 @@ void load_bin(const std::string& filename) {
     file.close();
 }
 
-
 void icb_dpi_slv_posedge(i32 addr, i32 data, i32 op, i32 wstrbs) {
     bool is_store = (op == 1);
     u32 uaddr = u32(addr);
@@ -194,9 +185,6 @@ void icb_dpi_slv_posedge(i32 addr, i32 data, i32 op, i32 wstrbs) {
     if (is_store) {
         if (uaddr == EXIT_STATUS_ADDR) {
             simulation_exit(data);
-        }
-        else if (uaddr == SERIAL_TX_DATA_ADDR) {
-            sf() << char(data & 0xFF);
         }
         else if ((uaddr & 0x80000000) == DRAM_START_ADDR) {
             uaddr -= DRAM_START_ADDR; // Align to 0
@@ -217,17 +205,7 @@ void icb_dpi_slv_comb(i32 addr, i32 data, i32 op, i32 wstrbs, i32* resp_data, u8
     *resp_data = 0;
     
     if (is_load) {
-    
-        if (uaddr == SERIAL_TX_STATUS_ADDR) {
-            *resp_data = 1;
-        }
-        else if (uaddr == SERIAL_RX_STATUS_ADDR) {
-            *resp_data = serial_buff.size();
-        }   
-        else if (uaddr == SERIAL_RX_DATA_ADDR) {
-            *resp_data = pop_serial_buff();
-        }
-        else if ((uaddr & 0x80000000) == DRAM_START_ADDR) {
+        if ((uaddr & 0x80000000) == DRAM_START_ADDR) {
             uaddr -= DRAM_START_ADDR; // Align to 0
 
             if (uaddr > dpi_mem_size) {
@@ -275,6 +253,26 @@ void dpi_write_byte(i32 addr, i32 i, i32 data) {
     } 
 }
 
+void dpi_sifive_uart_print(i32 data) {
+    sf() << char(data & 0xFF);
+}
+
+i32 dpi_sifive_uart_getchar() {
+    if (serial_buff.empty()) return (1 << 31);
+
+    u8 r = serial_buff.front();
+
+    serial_buff_mtx.lock();
+    serial_buff.pop();
+    serial_buff_mtx.unlock();
+
+    return r;
+}
+
+i32 dpi_sifive_uart_pending() {
+    return serial_buff.size();
+}
+
 int main(int argc, char** argv) {
     // Evaluate Verilator comand args
     Verilated::commandArgs(argc, argv);
@@ -312,11 +310,14 @@ int main(int argc, char** argv) {
             prof_file.open(argv[i]);
             prof_file_ptr = &prof_file;
         }
+        else if (arg == "--echo") {
+            if (!io_thread_started) do_echo = true;
+            else std::cerr << "--echo flag ignored\n";
+        }
         else if (arg == "--it") {
-            // Create thread that handles io
-            is_term_it = true;
             std::thread t(terminal_io_thread);
             t.detach();
+            io_thread_started = true;
         }
         
     }
@@ -333,8 +334,6 @@ int main(int argc, char** argv) {
 
     while (max_sim_time == 0 || sim_time < max_sim_time) {
         
-        dut->top->meip_irq = (serial_buff.size() > 0);
-        
         // Clk Toggle
         dut->clk ^= 1;
         // Reset signal
@@ -343,8 +342,9 @@ int main(int argc, char** argv) {
 
         // Simulation (2 eval to sync DPI better)
         dut->eval();
-        dut->eval();
-        
+
+        //if (sim_time % 100000 == 0) std::cout << "ST " << sim_time << '\n'; 
+    
         #ifdef TRACE_WAVE
             // Trace signals
             m_trace->dump(sim_time);
@@ -356,3 +356,4 @@ int main(int argc, char** argv) {
     simulation_exit(-1);
 
 }
+

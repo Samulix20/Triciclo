@@ -13,28 +13,22 @@
 #define FPGA_STACK_SIZE  10k
 #define FPGA_HEAP_SIZE   10k
 
-// FPGA Debug MMIO access
-#define FPGA_DEBUG_ADDR  0x10000000
-#define FPGA_DEBUG_REG   *((volatile uint32_t *) FPGA_DEBUG_ADDR)
-#define FPGA_CTRL_ADDR   0x10000010
-#define FPGA_CTRL_REG    *((volatile uint32_t *) (FPGA_CTRL_ADDR))
-
 // Exit status
 #define EXIT_STATUS_ADDR  0x10010000
 #define EXIT_STATUS_REG   *((volatile uint32_t *) EXIT_STATUS_ADDR)
 
 // Serial emulator
-#define SERIAL_BASE_ADDR        0x10020000
+#define SERIAL_BASE_ADDR        0x10000000
 // Transmiter
-#define SERIAL_TX_STATUS_ADDR   (SERIAL_BASE_ADDR)
-#define SERIAL_TX_STATUS        *((volatile uint32_t *) SERIAL_TX_STATUS_ADDR)
-#define SERIAL_TX_DATA_ADDR     (SERIAL_BASE_ADDR + 4)
+#define SERIAL_TX_DATA_ADDR     (SERIAL_BASE_ADDR + 4 * 0)
 #define SERIAL_TX_DATA          *((volatile uint32_t *) SERIAL_TX_DATA_ADDR)
+#define SERIAL_TX_STATUS_ADDR   (SERIAL_BASE_ADDR + 4 * 1)
+#define SERIAL_TX_STATUS        *((volatile uint32_t *) SERIAL_TX_STATUS_ADDR)
 // Receiver
-#define SERIAL_RX_STATUS_ADDR   (SERIAL_BASE_ADDR + 4 * 2)
-#define SERIAL_RX_STATUS        *((volatile uint32_t *) SERIAL_RX_STATUS_ADDR)
-#define SERIAL_RX_DATA_ADDR     (SERIAL_BASE_ADDR + 4 * 3)
+#define SERIAL_RX_DATA_ADDR     (SERIAL_BASE_ADDR + 4 * 2)
 #define SERIAL_RX_DATA          *((volatile uint32_t *) SERIAL_RX_DATA_ADDR)
+#define SERIAL_RX_STATUS_ADDR   (SERIAL_BASE_ADDR + 4 * 3)
+#define SERIAL_RX_STATUS        *((volatile uint32_t *) SERIAL_RX_STATUS_ADDR)
 
 // Debug
 #define DEBUG_REQ_ADDR    0x10030000
@@ -49,13 +43,13 @@
 
 
 // ACLINT memory map region 
-#define MTIMER_BASE_ADDR        0x20000000
+#define MTIMER_BASE_ADDR        0x02000000
 #define MTIMER_COUNTER          *((volatile uint64_t *) MTIMER_BASE_ADDR)
 
-#define MTIMER_CMP_BASE_ADDR    0x20008000
+#define MTIMER_CMP_BASE_ADDR    0x02004000
 #define MTIMER_CMP              *((volatile uint64_t *) MTIMER_CMP_BASE_ADDR)
 
-#define ACLINT_MSIP_BASE_ADDR   0x20010000
+#define ACLINT_MSIP_BASE_ADDR   0x02008000
 #define ACLINT_MSIP_REGS        ((volatile uint32_t *) ACLINT_MSIP_BASE_ADDR)
 
 // AXI master memory region

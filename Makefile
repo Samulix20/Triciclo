@@ -1,6 +1,5 @@
 -include config.mk
 
-
 # Verilator build
 obj_dir/${VERILATED_MODULE}: obj_dir/.verilator.stamp
 	make -C obj_dir -f ${VERILATED_MODULE}.mk
@@ -17,6 +16,10 @@ obj_dir/.verilator.stamp: \
 
 	@touch obj_dir/.verilator.stamp
 
+lint:
+	${VV} -F modules/icb/icb.f -F triciclo.f testbench/sim/top.sv \
+	-Wall --top-module ${TOP_MODULE} --lint-only
+
 # Testing
 test: clean
 	python scripts/basic_test.py
@@ -29,6 +32,8 @@ py: obj_dir/${VERILATED_MODULE}
 wave_only: clean
 	make VTRACE_FLAGS="--trace --trace-structs" CPP_TRACE_FLAG="-DTRACE_WAVE"
 
+wave: wave_only
+
 # Clang linter tool, creates compile_commands.json
 bear: clean
 	bear -- make
@@ -37,3 +42,7 @@ bear: clean
 clean:
 	rm -rf *.vcd *.dump
 	rm -rf obj_dir build
+
+linux: clean
+	make
+	./obj_dir/Vtop -b examples/linux/Image --echo --it

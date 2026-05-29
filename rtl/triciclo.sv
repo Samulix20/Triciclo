@@ -42,7 +42,6 @@ rv_csr_id_t csr_read_id;
 l32 csr_data;
 csr_write_request_t csr_req;
 trap_config_t trap_conf;
-trap_type_t trap_type;
 
 logic instr_ret;
 
@@ -59,7 +58,6 @@ csr_file csr_file (
     .read_id(csr_read_id), .read_csr(csr_data),
     .csr_write_req(csr_req),
     .trap_conf(trap_conf),
-    .trap_type(trap_type),
     .flush_bus(flush_bus)
 );
 
@@ -88,8 +86,7 @@ execute execute (
     .mem_data(dport_icb_resp_data), .data_req_done(dport_icb_resp_valid),
     .rf_req_reg(rf_write_req), .csr_req_reg(csr_req),
     .mtip(mtip), .msip(msip), .meip(meip),
-    .trap_conf(trap_conf), .trap(trap_type),
-    .flush_bus(flush_bus)
+    .trap_conf(trap_conf), .flush_bus(flush_bus)
 );
 
 endmodule

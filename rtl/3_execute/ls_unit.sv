@@ -33,7 +33,7 @@ always_ff @(posedge clk) begin
 end
 
 l32 reserved_addr;
-logic clear_reserved_addr, set_reserved_addr, reserved_addr_valid, sc_error;
+logic clear_reserved_addr, set_reserved_addr, reserved_addr_valid, sc_error, sc_ok;
 
 always_ff @(posedge clk) begin
     if (!resetn || clear_reserved_addr) begin 
@@ -57,8 +57,8 @@ load_fix load_fix (
 always_comb begin 
     data_req = internal_req;
     data_req.op = MEM_NOP;
-
     sc_error = 0;
+    sc_ok = 0;
 
     if (state == WAIT_REQ_RDY) begin 
         if (internal_req.op == AMO_SC) begin 
@@ -68,6 +68,10 @@ always_comb begin
 
         if (!sc_error) data_req.op = internal_req.op;
     end
+
+    else if (state == WAIT_DATA_VALID) begin 
+        if (internal_req.op == AMO_SC) sc_ok = 1; 
+    end
 end
 
 always_comb begin
@@ -75,6 +79,7 @@ always_comb begin
     ending = 0;
     store_mem_req = 0;
     set_reserved_addr = 0;
+    clear_reserved_addr = 0;
     out_data = fixed_load;
 
     case (state)
@@ -98,7 +103,8 @@ always_comb begin
             if (data_resp_valid) begin 
                 next_state = IDLE;
                 ending = 1;
-    
+
+                if (sc_ok) out_data = 0;
                 if (internal_req.op == AMO_LR) set_reserved_addr = 1;
                 if (is_store(internal_req.op) && reserved_addr == internal_req.addr) clear_reserved_addr = 1;
             end

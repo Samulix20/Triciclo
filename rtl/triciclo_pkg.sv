@@ -390,7 +390,8 @@ endfunction
 typedef enum logic [1:0] {
     NO_FLUSH,
     FLUSH_BRANCH,
-    FLUSH_TRAP
+    FLUSH_TRAP,
+    FLUSH_MRET
 } flush_type_t;
 
 typedef struct packed {

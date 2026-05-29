@@ -10,8 +10,6 @@ import triciclo_pkg::*;
 
     input csr_write_request_t csr_write_req,
     output trap_config_t trap_conf,
-
-    input trap_type_t trap_type,
     input flush_bus_t flush_bus,
 
     input logic instr_ret
@@ -38,6 +36,12 @@ always_comb begin
     // Default all bits to 0
     read_csr = 0;
     case (read_id)
+        CSR_MISA: begin 
+            read_csr[31:30] = 1; // XLEN = 32 bit
+            read_csr[0] = 1;     // A
+            read_csr[8] = 1;     // RVI Base
+            read_csr[12] = 1;    // M
+        end
         CSR_MSTATUS: begin 
             read_csr[10:9] = mstatus.mpp;
             read_csr[8] = mstatus.spp;
@@ -82,24 +86,23 @@ always_ff @(posedge clk) begin
             if (instr_ret) minstret <= minstret + 1;
         end
         
-        if (flush_bus.op == FLUSH_TRAP) begin 
-            // Trap return instruction
-            if (trap_type == TRAP_MRET) begin
-                mstatus.mie <= mstatus.mpie;
-                mstatus.mpie <= 1;
-                current_mode <= mstatus.mpp;
-            end
-            // Trap
-            else begin
-                mepc <= flush_bus.from;
-                mcause <= flush_bus.cause;
-                mtval <= flush_bus.value;
-                mstatus.mpie <= mstatus.mie;
-                mstatus.mie <= 0;
-                mstatus.mpp <= current_mode;
-                current_mode <= MODE_MACHINE;
-            end
+        // Trap return instruction
+        if (flush_bus.op == FLUSH_MRET) begin 
+            mstatus.mie <= mstatus.mpie;
+            mstatus.mpie <= 1;
+            current_mode <= mstatus.mpp;
         end
+        // Trap
+        else if (flush_bus.op == FLUSH_TRAP) begin
+            mepc <= flush_bus.from;
+            mcause <= flush_bus.cause;
+            mtval <= flush_bus.value;
+            mstatus.mpie <= mstatus.mie;
+            mstatus.mie <= 0;
+            mstatus.mpp <= current_mode;
+            current_mode <= MODE_MACHINE;
+        end
+
         else if (csr_write_req.write_enable) begin
             case (csr_write_req.id)
                 CSR_MSTATUS: begin 

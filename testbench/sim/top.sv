@@ -11,13 +11,8 @@ import triciclo_pkg::*;
     input logic clk, resetn
 );
 
-// Normally controlled by PLIC
-logic meip_irq /* verilator public */;
-assign meip_irq = 0;
 
-localparam int unsigned NHARTS = 1;
-logic mtip [NHARTS - 1:0];
-logic msip [NHARTS - 1:0];
+logic meip, mtip, msip;
 l64 mtime_val;
 
 `ICB_BUS(iport_bus, 32, 32, 4, 1);
@@ -32,7 +27,7 @@ triciclo  # (
     // Data
     `ICB_BUS_CONNECT(dport, dport_bus),
     // IRQs
-    .mtip(mtip[0]), .msip(msip[0]), .meip(0)
+    .mtip(mtip), .msip(0), .meip(meip)
 );
 
 // Instruction memory
@@ -45,11 +40,12 @@ amo_mem main_instruction_memory (
 // Fast Net
 
 localparam int pma_conf_size = 32 * 2;
-localparam int fast_net_len = 4;
+localparam int fast_net_len = 5;
 localparam logic [fast_net_len - 1:0][pma_conf_size - 1:0] fast_net_conf = {
+    32'hFF00_0000, 32'h0c00_0000,
+    32'hFF00_0000, 32'h0200_0000,
     32'hF000_0000, 32'h1000_0000,
     32'hF000_0000, 32'h2000_0000,
-    32'hF000_0000, 32'h3000_0000,
     32'h8000_0000, 32'h8000_0000
 };
 
@@ -64,34 +60,41 @@ icb_net #(
     `ICB_BUS_CONNECT(slv, fast_net_array)
 );
 
+logic [31:0] plic_pending;
+logic uart_irq;
+
+always_comb begin
+    plic_pending = 0;
+    plic_pending[3] = uart_irq;
+end
+
+rv_plic plic (
+    .clk(clk), .resetn(resetn),
+    .pending(plic_pending), .meip(meip),
+    `ICB_BUS_CONNECT_ARRAY(slv, fast_net_array, 4)
+);
+
+rv_clint clint (
+    .clk(clk), .resetn(resetn),
+    .o_mtip(mtip), .o_msip(msip), .o_mtime(mtime_val),
+    `ICB_BUS_CONNECT_ARRAY(slv, fast_net_array, 3)
+);
+
+icb_dpi_slv general_mmio (
+    .clk(clk), .resetn(resetn),
+    `ICB_BUS_CONNECT_ARRAY(slv, fast_net_array, 2)
+);
+
+dpi_sifive_uart sifive_uart (
+    .clk(clk), .resetn(resetn), .irq(uart_irq),
+    `ICB_BUS_CONNECT_ARRAY(slv, fast_net_array, 1)
+);
+
 amo_mem main_data_memory (
     .clk(clk), .resetn(resetn),
     `ICB_BUS_CONNECT_ARRAY(slv, fast_net_array, 0)
 );
 
-rv_aclint aclint (
-    .clk(clk), .resetn(resetn),
-    .o_mtip(mtip), .o_msip(msip), .o_mtime(mtime_val),
-    `ICB_BUS_CONNECT_ARRAY(slv, fast_net_array, 2)
-);
-
-icb_dpi_slv general_mmio (
-    .clk(clk), .resetn(resetn),
-    `ICB_BUS_CONNECT_ARRAY(slv, fast_net_array, 3)
-);
-
-`AXI4_LITE_BUS(axi_bus, 32, 32, 4);
-
-axi4_lite_master axi_mst (
-    .clk(clk), .resetn(resetn),
-    `ICB_BUS_CONNECT_ARRAY(slv, fast_net_array, 1),
-    `AXI4_LITE_MASTER_CONNECT(axi_bus, intf)
-);
-
-axi4_lite_slave axi_slv (
-    .i_clk(clk), .i_resetn(resetn),
-    `AXI4_LITE_SLAVE_CONNECT(axi_bus, intf)
-);
 
 endmodule
 
