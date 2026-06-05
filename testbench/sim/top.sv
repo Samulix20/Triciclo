@@ -11,23 +11,32 @@ import triciclo_pkg::*;
     input logic clk, resetn
 );
 
+localparam int fast_net_len = 5;
+localparam logic [fast_net_len - 1:0][pma_conf_size - 1:0] fast_net_conf = {
+    32'hFF00_0000, 32'h0c00_0000,
+    32'hFF00_0000, 32'h0200_0000,
+    32'hF000_0000, 32'h1000_0000,
+    32'hF000_0000, 32'h2000_0000,
+    32'h8000_0000, 32'h8000_0000
+};
 
 logic meip, mtip, msip;
 l64 mtime_val;
 
-`ICB_BUS(iport_bus, 32, 32, 4, 1);
-`ICB_BUS(dport_bus, 32, 32, 4, 1);
+`ICB_BUS(iport_bus, 32, 32, 4);
+`ICB_BUS(dport_bus, 32, 32, 4);
 
 triciclo  # (
-    .HARDTID(0)
+    .HARDTID(0),
+    .PMA_REGS(fast_net_len), .PMA_CONF(fast_net_conf)
 ) core (
     .clk(clk), .resetn(resetn), .enable(1),
+    // IRQs
+    .mtip(mtip), .msip(0), .meip(meip),
     // Instruction
     `ICB_BUS_CONNECT(iport, iport_bus),
     // Data
-    `ICB_BUS_CONNECT(dport, dport_bus),
-    // IRQs
-    .mtip(mtip), .msip(0), .meip(meip)
+    `ICB_BUS_CONNECT(dport, dport_bus)
 );
 
 // Instruction memory
@@ -38,18 +47,7 @@ amo_mem main_instruction_memory (
 );
 
 // Fast Net
-
-localparam int pma_conf_size = 32 * 2;
-localparam int fast_net_len = 5;
-localparam logic [fast_net_len - 1:0][pma_conf_size - 1:0] fast_net_conf = {
-    32'hFF00_0000, 32'h0c00_0000,
-    32'hFF00_0000, 32'h0200_0000,
-    32'hF000_0000, 32'h1000_0000,
-    32'hF000_0000, 32'h2000_0000,
-    32'h8000_0000, 32'h8000_0000
-};
-
-`ICB_BUS_ARRAY(fast_net_array, fast_net_len, 32, 32, 4, 1);
+`ICB_BUS_ARRAY(fast_net_array, fast_net_len, 32, 32, 4);
 
 icb_net #(
     .NSLAVES(fast_net_len),

@@ -6,6 +6,8 @@ import triciclo_pkg::*;
     input logic mtip, msip, meip,
     input dec_exec_buff_t dec_data,
     input trap_config_t trap_conf,
+    input logic pma_fault_jump, ma_jump,
+    input l32 alu_result,
     output logic trap,
     output flush_bus_t flush_bus
 );
@@ -18,7 +20,7 @@ always_comb begin
     flush_bus.value = 0;
     trap = 0;
 
-    // IRQ
+    // IRQs
     if (meip && trap_conf.mstatus.mie && trap_conf.mie.meie) begin
         trap = 1;
         flush_bus.cause = CAUSE_EXT_IRQ;
@@ -30,6 +32,16 @@ always_comb begin
     else if (msip && trap_conf.mstatus.mie && trap_conf.mie.msie) begin 
         trap = 1;
         flush_bus.cause = CAUSE_SOFT_IRQ;
+    end
+    else if (ma_jump) begin 
+        trap = 1;
+        flush_bus.cause = CAUSE_MISALIGNED_FETCH;
+        flush_bus.value = alu_result;
+    end
+    else if (pma_fault_jump) begin 
+        trap = 1;
+        flush_bus.from = alu_result;
+        flush_bus.cause = CAUSE_INSTRUCTION_ACCESS_FAULT;
     end
     else if (dec_data.control.trap_type == TRAP_ECALL) begin
         trap = 1;

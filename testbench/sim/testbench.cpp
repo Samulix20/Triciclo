@@ -1,4 +1,5 @@
 
+#include <cstdio>
 #include <ios>
 #include <iostream>
 #include <string>
@@ -26,6 +27,8 @@ using i64 = int64_t;
 using u64 = uint64_t;
 using i32 = int32_t;
 using u32 = uint32_t;
+using i16 = int16_t;
+using u16 = uint16_t;
 using i8 = int8_t;
 using u8 = uint8_t;
 
@@ -201,8 +204,8 @@ void icb_dpi_slv_comb(i32 addr, i32 data, i32 op, i32 wstrbs, i32* resp_data, u8
     u32 uaddr = u32(addr);
     u32 udata = u32(data);
 
-    *err = 0;
     *resp_data = 0;
+    *err = 0;
     
     if (is_load) {
         if ((uaddr & 0x80000000) == DRAM_START_ADDR) {

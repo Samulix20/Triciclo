@@ -7,13 +7,18 @@ import triciclo_pkg::*;
     output mem_request_t data_req,
     input logic data_req_ack,
     input l32 data_resp_data,
+    input logic data_resp_err,
     input logic data_resp_valid,
 
     // Control
     input logic start,
     input mem_request_t input_data_req,
     output logic ending,
-    output l32 out_data
+    output l32 out_data,
+
+    // This Functional Unit can trap
+    output l32 trap_cause, trap_value, 
+    output logic trap
 );
 
 typedef enum logic [1:0] {IDLE, WAIT_REQ_RDY, WAIT_DATA_VALID} state_t;
@@ -53,14 +58,48 @@ load_fix load_fix (
     .fixed_load(fixed_load)
 );
 
-// Control op
+// Trap Control
+logic ma;
+always_comb begin
+    trap = 0;
+    trap_cause = 0;
+    trap_value = internal_req.addr;
+    ma = check_ma(internal_req.op, internal_req.addr[1:0]);
+
+    if (state == WAIT_REQ_RDY) begin 
+        if (is_store(internal_req.op)) begin 
+            if (ma) begin 
+                trap = 1;
+                trap_cause = CAUSE_MISALIGNED_STORE;
+            end
+        end
+        else if (internal_req.op != MEM_NOP) begin 
+            if (ma) begin 
+                trap = 1;
+                trap_cause = CAUSE_MISALIGNED_LOAD;
+            end
+        end
+    end
+    else if (state == WAIT_DATA_VALID && data_resp_valid) begin 
+        if (is_store(internal_req.op) && data_resp_err) begin
+            trap = 1;
+            trap_cause = CAUSE_STORE_ACCESS_FAULT;
+        end
+        else if (internal_req.op != MEM_NOP && data_resp_err) begin 
+            trap = 1;
+            trap_cause = CAUSE_LOAD_ACCESS_FAULT;
+        end
+    end
+end
+
+// Control op and sc
 always_comb begin 
     data_req = internal_req;
     data_req.op = MEM_NOP;
     sc_error = 0;
     sc_ok = 0;
 
-    if (state == WAIT_REQ_RDY) begin 
+    if (state == WAIT_REQ_RDY && !trap) begin 
         if (internal_req.op == AMO_SC) begin 
             if (!reserved_addr_valid) sc_error = 1;
             else if (internal_req.addr != reserved_addr) sc_error = 1;
@@ -90,7 +129,11 @@ always_comb begin
             end 
         end
         WAIT_REQ_RDY: begin 
-            if (sc_error) begin 
+            if (trap) begin 
+                next_state = IDLE;
+                ending = 1;
+            end
+            else if (sc_error) begin 
                 next_state = IDLE;
                 ending = 1;
                 out_data = 1;

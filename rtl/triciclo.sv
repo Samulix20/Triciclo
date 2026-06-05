@@ -7,14 +7,15 @@ module triciclo
 import triciclo_pkg::*;
 import icb_pkg::*;
 # (
-    parameter int HARDTID = 0
-)
-(
+    parameter int HARDTID = 0,
+    parameter int PMA_REGS = 1,
+    parameter logic [PMA_REGS - 1:0][pma_conf_size - 1:0] PMA_CONF = 0
+) (
     input logic clk, resetn, enable,
     // Instruction
-    `ICB_BUS_MASTER_PORT(iport, 32, 32, 4, 1),
+    `ICB_BUS_MASTER_PORT(iport, 32, 32, 4),
     // Data
-    `ICB_BUS_MASTER_PORT(dport, 32, 32, 4, 1),
+    `ICB_BUS_MASTER_PORT(dport, 32, 32, 4),
     // Pending interrupts
     input logic mtip, msip, meip
 );
@@ -79,11 +80,14 @@ decode decode (
     .flush_bus(flush_bus)
 );
 
-execute execute (
+execute #(
+    .PMA_REGS(PMA_REGS), .PMA_CONF(PMA_CONF)
+) execute (
     .clk(clk), .resetn(resetn), .enable(enable), .instr_ret(instr_ret),
     .dec_data(dec_exec_buff), .exec_ready(exec_ready),
     .data_req(data_mem_req), .data_req_ack(dport_icb_req_ready), 
     .mem_data(dport_icb_resp_data), .data_req_done(dport_icb_resp_valid),
+    .mem_err(dport_icb_resp_err),
     .rf_req_reg(rf_write_req), .csr_req_reg(csr_req),
     .mtip(mtip), .msip(msip), .meip(meip),
     .trap_conf(trap_conf), .flush_bus(flush_bus)

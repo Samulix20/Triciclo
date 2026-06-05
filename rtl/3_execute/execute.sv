@@ -2,7 +2,10 @@
 
 module execute 
 import triciclo_pkg::*;
-(
+#(
+    parameter int PMA_REGS = 1,
+    parameter logic [PMA_REGS - 1:0][pma_conf_size - 1:0] PMA_CONF = 0
+) (
     input logic clk, resetn, enable,
 
     // Pipeline D-E
@@ -13,6 +16,7 @@ import triciclo_pkg::*;
     output mem_request_t data_req,
     input logic data_req_ack,
     input l32 mem_data,
+    input logic mem_err,
     input logic data_req_done,
 
     // Register File
@@ -101,13 +105,19 @@ int_div int_div (
     .opsel(mul_op), .result(div_result)
 );
 
-logic do_branch;
-branch branch (
-    .op1(reg_data[0]), .op2(reg_data[1]),
+logic do_branch, ma_jump, pma_fault_jump;
+branch #(
+    .PMA_REGS(PMA_REGS), .PMA_CONF(PMA_CONF)
+) branch (
+    .op1(reg_data[0]), .op2(reg_data[1]), .target(int_alu_out),
     .branch_op(dec_data.control.branch_op),
-    .do_branch(do_branch)
+    .do_branch(do_branch), 
+    .ma(ma_jump), .pma_fault(pma_fault_jump)
 );
 
+
+logic lsu_trap;
+l32 lsu_trap_cause, lsu_trap_value;
 mem_request_t lsu_req;
 logic lsu_start, lsu_ending;
 l32 lsu_data;
@@ -120,9 +130,10 @@ end
 ls_unit lsu (
     .clk(clk), .resetn(resetn),
     .data_req(data_req), .data_req_ack(data_req_ack),
-    .data_resp_data(mem_data), .data_resp_valid(data_req_done),
+    .data_resp_data(mem_data), .data_resp_valid(data_req_done), .data_resp_err(mem_err),
     .start(lsu_start), .ending(lsu_ending),
-    .input_data_req(lsu_req), .out_data(lsu_data)
+    .input_data_req(lsu_req), .out_data(lsu_data),
+    .trap(lsu_trap), .trap_cause(lsu_trap_cause), .trap_value(lsu_trap_value)
 );
 
 csr_write_request_t current_csr_req;
@@ -149,10 +160,13 @@ logic trap;
 flush_bus_t trap_flush_bus;
 
 trap_unit trap_unit (
-    .mtip(mtip), .msip(msip), .meip(meip),
+    .mtip(mtip), .msip(msip), .meip(meip), 
+    .ma_jump(ma_jump), .pma_fault_jump(pma_fault_jump), 
+    .alu_result(int_alu_out),
     .dec_data(dec_data), .trap_conf(trap_conf),
     .trap(trap), .flush_bus(trap_flush_bus)
 );
+
 
 always_comb begin
     next_state = state;
@@ -201,7 +215,14 @@ always_comb begin
         end
 
         MEM_WAIT: begin 
-            if (lsu_ending) begin 
+            if (lsu_trap) begin 
+                exec_ready = 1;
+                flush_bus.to = trap_conf.mtvec;
+                flush_bus.value = lsu_trap_value;
+                flush_bus.cause = lsu_trap_cause;
+                next_state = IDLE;
+            end
+            else if (lsu_ending) begin 
                 current_rf_req.write_enable = dec_data.control.rf_write;
                 exec_ready = 1;
                 next_state = IDLE;

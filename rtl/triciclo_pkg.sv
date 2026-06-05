@@ -198,10 +198,13 @@ typedef struct packed {
 
 typedef enum logic [31:0] {
     CAUSE_MISALIGNED_FETCH = 'h0,
+    CAUSE_INSTRUCTION_ACCESS_FAULT = 'h1,
     CAUSE_ILLEGAL_INSTRUCTION = 'h2,
     CAUSE_BREAKPOINT = 'h3,
     CAUSE_MISALIGNED_LOAD = 'h4,
+    CAUSE_LOAD_ACCESS_FAULT = 'h5,
     CAUSE_MISALIGNED_STORE = 'h6,
+    CAUSE_STORE_ACCESS_FAULT = 'h7,
     CAUSE_USER_ECALL = 'h8,
     CAUSE_SUPERVISOR_ECALL = 'h9,
     CAUSE_MACHINE_ECALL = 'hb,
@@ -295,28 +298,47 @@ typedef enum logic [3:0] {
     OP_NOP = 4'b1111
 } branch_op_t /*verilator public*/;
 
-typedef enum logic [5:0] {
-    MEM_LB =    6'b000000,
-    MEM_LH =    6'b000001,
-    MEM_LW =    6'b000010,
-    MEM_LBU =   6'b000100,
-    MEM_LHU =   6'b000101,
-    MEM_SB =    6'b001000,
-    MEM_SH =    6'b001001,
-    MEM_SW =    6'b001010,
-    MEM_NOP =   6'b001111,
-    AMO_LR =    6'b100010,
-    AMO_SC =    6'b100011,
-    AMO_SWAP =  6'b100001,
-    AMO_ADD =   6'b100000,
-    AMO_XOR =   6'b100100,
-    AMO_AND =   6'b101100,
-    AMO_OR =    6'b101000,
-    AMO_MIN =   6'b110000,
-    AMO_MAX =   6'b110100,
-    AMO_MINU =  6'b111000,
-    AMO_MAXU =  6'b111100
+typedef enum logic [4:0] {
+    MEM_NOP,
+    MEM_LB,
+    MEM_LH,
+    MEM_LW,
+    MEM_LBU,
+    MEM_LHU,
+    AMO_LR,
+    MEM_SB,
+    MEM_SH,
+    MEM_SW,
+    AMO_SC,
+    AMO_SWAP,
+    AMO_ADD,
+    AMO_XOR,
+    AMO_AND,
+    AMO_OR,
+    AMO_MIN,
+    AMO_MAX,
+    AMO_MINU,
+    AMO_MAXU
 } mem_op_t /*verilator public*/;
+
+function automatic logic is_store(mem_op_t mem_op);
+    return mem_op >= MEM_SB;
+endfunction
+
+function automatic logic is_load(mem_op_t mem_op);
+    return mem_op > MEM_NOP && mem_op <= AMO_LR;
+endfunction
+
+function automatic logic is_amo(mem_op_t mem_op);
+    return mem_op >= AMO_SWAP;
+endfunction
+
+function automatic logic check_ma(mem_op_t op, logic[1:0] addr);
+    logic a2b, a4b;
+    a2b = (op == MEM_LHU || op == MEM_LH || op == MEM_SH);
+    a4b = (op == MEM_LW || op == AMO_LR || op == MEM_SW || op >= AMO_SC);
+    return (a2b && addr[0] != 0) || (a4b && addr[1:0] != 0);
+endfunction
 
 typedef enum logic [2:0] {
     // Standard outputs
@@ -336,7 +358,9 @@ typedef enum logic [3:0] {
     TRAP_ILLEGAL,
     TRAP_MISALIGNED_FETCH,
     TRAP_MISALIGNED_LOAD,
+    TRAP_LOAD_FAULT,
     TRAP_MISALIGNED_STORE,
+    TRAP_STORE_FAULT,
     TRAP_ECALL,
     TRAP_EBREAK,
     TRAP_MRET,
@@ -357,7 +381,6 @@ typedef struct packed {
     int_alu_input_t int_alu_input;
     // Memory
     mem_op_t mem_op;
-    logic is_amo;
     // Writeback source
     wb_result_t wb_result_src;
     // Final Writeback
@@ -378,7 +401,6 @@ function automatic control_t create_nop_ctrl();
     instr.int_alu_op = ALU_OP_ADD;
     instr.int_alu_input = ALU_IN_R1_R2;
     instr.mem_op = MEM_NOP;
-    instr.is_amo = 0;
     instr.wb_result_src = WB_ALU;
     instr.rf_write = 0;
     instr.csr_write = 0;
@@ -443,6 +465,13 @@ typedef struct packed {
     l32 [CORE_RF_NUM_READ - 1: 0] reg_data;
     l32 csr;
 } dec_exec_buff_t;
+
+typedef struct packed {
+    l32 mask;
+    l32 match;
+} pma_conf_t;
+
+localparam pma_conf_size = $bits(pma_conf_t);
 
 // Translate core request to bus requests module as function
 
@@ -540,13 +569,6 @@ function automatic void mem_req_to_bus_req (
         end
         default: begin end
     endcase
-endfunction
-
-function automatic logic is_store(mem_op_t mem_op);
-    logic is_amo = mem_op[5];
-    if (mem_op == MEM_NOP) return 0;
-    else if (is_amo) return mem_op != AMO_LR;
-    else return mem_op[3];
 endfunction
 
 endpackage

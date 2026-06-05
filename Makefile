@@ -46,3 +46,9 @@ clean:
 linux: clean
 	make
 	./obj_dir/Vtop -b examples/linux/Image --echo --it
+
+kernel:
+	cd examples/linux; make all
+
+kernelconf:
+	cd examples/linux; make menuconfig

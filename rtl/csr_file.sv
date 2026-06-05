@@ -91,6 +91,7 @@ always_ff @(posedge clk) begin
             mstatus.mie <= mstatus.mpie;
             mstatus.mpie <= 1;
             current_mode <= mstatus.mpp;
+            //$display("MRET to %x", mepc);
         end
         // Trap
         else if (flush_bus.op == FLUSH_TRAP) begin
@@ -101,6 +102,7 @@ always_ff @(posedge clk) begin
             mstatus.mie <= 0;
             mstatus.mpp <= current_mode;
             current_mode <= MODE_MACHINE;
+            //$display("TRAP FROM %x CAUSE %x", flush_bus.from, flush_bus.cause);
         end
 
         else if (csr_write_req.write_enable) begin

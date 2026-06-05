@@ -119,7 +119,12 @@ always_comb begin
         OPCODE_STORE: begin
             control.imm = IMM_S;
             control.int_alu_input = ALU_IN_R1_IMM;
-            control.mem_op = mem_op_t'({1'b01, instr.funct3});
+            case (instr.funct3)  
+                3'b000: control.mem_op = MEM_SB;
+                3'b001: control.mem_op = MEM_SH;
+                3'b010: control.mem_op = MEM_SW;
+                default: begin end
+            endcase
         end
 
         // Load
@@ -128,7 +133,14 @@ always_comb begin
         OPCODE_LOAD: begin
             control.imm = IMM_I;
             control.int_alu_input = ALU_IN_R1_IMM;
-            control.mem_op = mem_op_t'({1'b00, instr.funct3});
+            case (instr.funct3)
+                3'b000: control.mem_op = MEM_LB;
+                3'b001: control.mem_op = MEM_LH;
+                3'b010: control.mem_op = MEM_LW;
+                3'b100: control.mem_op = MEM_LBU;
+                3'b101: control.mem_op = MEM_LHU;
+                default: begin end
+            endcase
             control.wb_result_src = WB_LOAD;
             control.rf_write = 1;
         end
@@ -177,9 +189,21 @@ always_comb begin
                 control.wb_result_src = WB_LOAD;
                 control.imm = IMM_0;
                 control.rf_write = 1;
-                control.mem_op = mem_op_t'({1'b1, instr.funct7[6:2]});
-                control.is_amo = 1;
-                // TODO check invalid AMO funct7
+
+                case (instr.funct7[6:2]) 
+                    5'b00010: control.mem_op = AMO_LR;
+                    5'b00011: control.mem_op = AMO_SC;
+                    5'b00001: control.mem_op = AMO_SWAP;
+                    5'b00000: control.mem_op = AMO_ADD;
+                    5'b00100: control.mem_op = AMO_XOR;
+                    5'b01100: control.mem_op = AMO_AND;
+                    5'b01000: control.mem_op = AMO_OR;
+                    5'b10000: control.mem_op = AMO_MIN;
+                    5'b10100: control.mem_op = AMO_MAX;
+                    5'b11000: control.mem_op = AMO_MINU;
+                    5'b11100: control.mem_op = AMO_MAXU;
+                    default: control.trap_type = TRAP_ILLEGAL;
+                endcase
             end
             else begin 
                 control.trap_type = TRAP_ILLEGAL;
