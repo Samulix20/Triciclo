@@ -21,6 +21,11 @@ mie_t mie;
 l32 mscratch, mcause, mtval, mtvec, mepc;
 
 /* verilator public_on */
+dcsr_t dcsr;
+l32 dpc;
+/* verilator public_off */
+
+/* verilator public_on */
 l64 mcycle, minstret;
 /* verilator public_off */
 
@@ -30,6 +35,8 @@ always_comb begin
     trap_conf.mie = mie;
     trap_conf.mtvec = mtvec;
     trap_conf.mepc = mepc;
+    trap_conf.dcsr = dcsr;
+    trap_conf.dpc = dpc;
 end
 
 always_comb begin 
@@ -62,6 +69,20 @@ always_comb begin
         CSR_MSCRATCH: read_csr = mscratch;
         CSR_MCYCLE: read_csr = mcycle[0];
         CSR_MCYCLEH: read_csr = mcycle[1];
+        CSR_DCSR: begin
+            read_csr[31:28] = dcsr.xdebugver;
+            read_csr[15]    = dcsr.ebreakm;
+            read_csr[12]    = dcsr.ebreaku;
+            read_csr[11]    = dcsr.stepie;
+            read_csr[10]    = dcsr.stopcount;
+            read_csr[9]     = dcsr.stoptime;
+            read_csr[8:6]   = dcsr.cause;   // read-only
+            read_csr[4]     = dcsr.mprven;
+            read_csr[3]     = dcsr.nmip;
+            read_csr[2]     = dcsr.step;
+            read_csr[1:0]   = dcsr.prv;
+        end
+        CSR_DPC:       read_csr = dpc;
         default: begin end
     endcase
 end
@@ -77,6 +98,10 @@ always_ff @(posedge clk) begin
         // Counters
         mcycle <= 0;
         minstret <= 0;
+        // Debug
+        dcsr <= '0;
+        dcsr.xdebugver <= 4'd4;
+        dpc <= '0;
     end
     else begin 
         if (enable) begin
@@ -104,6 +129,17 @@ always_ff @(posedge clk) begin
             current_mode <= MODE_MACHINE;
             //$display("TRAP FROM %x CAUSE %x", flush_bus.from, flush_bus.cause);
         end
+        // Debug mode entry 
+        else if (flush_bus.op == FLUSH_DEBUG_ENTRY) begin
+            dcsr.cause <= flush_bus.cause[2:0];
+            dpc <= flush_bus.from;
+            current_mode <= MODE_DEBUG;
+        end
+
+        // Debug mode exit
+        else if (flush_bus.op == FLUSH_DEBUG_RETURN) begin
+            current_mode <= priv_mode_t'(dcsr.prv);
+        end
 
         else if (csr_write_req.write_enable) begin
             case (csr_write_req.id)
@@ -127,6 +163,18 @@ always_ff @(posedge clk) begin
                 CSR_MSCRATCH: mscratch <= csr_write_req.data;
                 CSR_MCYCLE: mcycle[0] <= csr_write_req.data;
                 CSR_MCYCLEH: mcycle[1]  <= csr_write_req.data;
+                CSR_DCSR: begin
+                    dcsr.ebreakm  <= csr_write_req.data[15];
+                    dcsr.ebreaku  <= csr_write_req.data[12];
+                    dcsr.stepie   <= csr_write_req.data[11];
+                    dcsr.stopcount <= csr_write_req.data[10];
+                    dcsr.stoptime  <= csr_write_req.data[9];
+                    // dcsr.cause [8:6] read-only
+                    dcsr.mprven   <= csr_write_req.data[4];
+                    dcsr.step     <= csr_write_req.data[2];
+                    dcsr.prv      <= priv_mode_t'(csr_write_req.data[1:0]);
+                end
+                CSR_DPC:       dpc        <= csr_write_req.data;
                 default: begin end
             endcase
         end

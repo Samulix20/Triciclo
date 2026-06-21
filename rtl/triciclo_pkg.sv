@@ -137,13 +137,18 @@ typedef enum logic [11:0] {
     CSR_INSTRET = 'hC02,
     CSR_INSTRETH = 'hC82,
     // IDs
-    CSR_MHARTID = 'hF14
+    CSR_MHARTID = 'hF14,
+    // Debug
+    CSR_DCSR      = 'h7b0,
+    CSR_DPC       = 'h7b1,
+    CSR_DSCRATCH0 = 'h7b2
 } rv_valid_csr_t;
 
 typedef enum logic [1:0] {
     MODE_USER = 'b00,
     MODE_SUPERVISOR = 'b01,
-    MODE_MACHINE = 'b11
+    MODE_MACHINE = 'b11,
+    MODE_DEBUG = 2'b10
 } priv_mode_t;
 
 typedef struct packed {
@@ -212,6 +217,52 @@ typedef enum logic [31:0] {
     CAUSE_TIMER_IRQ = 'h80000007,
     CAUSE_EXT_IRQ  = 'h8000000B
 } trap_cause_t;
+
+
+// Debug CSR List // Quitar no usados
+typedef struct packed {
+    logic [3:0]  xdebugver;  // [31:28] siempre 4
+    logic [11:0] reserved;   // [27:16]
+    logic        ebreakm;    // [15]    ebreak en M-mode entra en debug
+    logic        ebreaku;    // [12]    ebreak en U-mode entra en debug
+    logic        stepie;     // [11]    IRQs habilitadas durante step
+    logic        stopcount;  // [10]    congela mcycle/minstret en debug
+    logic        stoptime;   // [9]     congela timer en debug
+    logic [2:0]  cause;      // [8:6]   motivo del halt
+    logic        reserved2;  // [5]
+    logic        mprven;     // [4]     mprv activo en debug
+    logic        nmip;       // [3]     NMI pendiente
+    logic        step;       // [2]     single-step al hacer dret
+    logic [1:0]  prv;        // [1:0]   modo privilegiado antes del halt
+} dcsr_t;
+
+typedef enum logic [2:0] {
+    DCSR_CAUSE_EBREAK       = 3'd1,  // ebreak con dcsr.ebreakm=1
+    DCSR_CAUSE_TRIGGER      = 3'd2,  // breakpoint por trigger unit
+    DCSR_CAUSE_HALTREQ      = 3'd3,  // halt externo del DM/JTAG
+    DCSR_CAUSE_STEP         = 3'd4,  // single-step (dcsr.step=1)
+    DCSR_CAUSE_RESETHALTREQ = 3'd5,  // halt-on-reset
+    DCSR_CAUSE_HALTGROUP    = 3'd6   // halt group
+} dcsr_cause_t;
+
+
+typedef struct packed {
+    logic   abs_end;    // [4]
+    logic   running;    // [3]
+    logic   halted;     // [2]
+    logic   havereset;  // [1]
+    logic   resumeACK;  // [0]
+} dbg_core_status_t /*verilator public*/;
+
+
+typedef struct packed {
+    logic   pb_exec;        // [4]
+    logic   halt_request;   // [3]
+    logic   hart_reset;     // [2]
+    logic   reset_request;  // [1]
+    logic   resumeACK;      // [0]
+} dbg_core_control_t /*verilator public*/;
+
 
 
 // Core Config
@@ -409,11 +460,13 @@ function automatic control_t create_nop_ctrl();
     return instr;
 endfunction
 
-typedef enum logic [1:0] {
+typedef enum logic [2:0] {
     NO_FLUSH,
     FLUSH_BRANCH,
     FLUSH_TRAP,
-    FLUSH_MRET
+    FLUSH_MRET,
+    FLUSH_DEBUG_ENTRY,
+    FLUSH_DEBUG_RETURN
 } flush_type_t;
 
 typedef struct packed {
@@ -422,6 +475,8 @@ typedef struct packed {
     mie_t mie;
     l32 mtvec;
     l32 mepc;
+    dcsr_t dcsr;
+    l32 dpc;
 } trap_config_t;
 
 typedef struct packed {

@@ -23,6 +23,9 @@ localparam logic [fast_net_len - 1:0][pma_conf_size - 1:0] fast_net_conf = {
 logic meip, mtip, msip;
 l64 mtime_val;
 
+dbg_core_control_t dbg_core_control/*verilator public*/;
+dbg_core_status_t  dbg_core_status/*verilator public*/;
+
 `ICB_BUS(iport_bus, 32, 32, 4);
 `ICB_BUS(dport_bus, 32, 32, 4);
 
@@ -33,6 +36,8 @@ triciclo  # (
     .clk(clk), .resetn(resetn), .enable(1),
     // IRQs
     .mtip(mtip), .msip(0), .meip(meip),
+    // Debug
+    .dbg_core_control(dbg_core_control), .dbg_core_status(dbg_core_status),
     // Instruction
     `ICB_BUS_CONNECT(iport, iport_bus),
     // Data
@@ -93,6 +98,11 @@ amo_mem main_data_memory (
     `ICB_BUS_CONNECT_ARRAY(slv, fast_net_array, 0)
 );
 
+
+always_comb begin
+    dbg_core_control = '0;
+    dbg_core_control.resumeACK = 1;  // reposo: bloqueado
+end
 
 endmodule
 

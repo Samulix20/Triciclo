@@ -4,6 +4,7 @@ module trap_unit
 import triciclo_pkg::*;
 (
     input logic mtip, msip, meip,
+    input logic halt_req, step_req, haltonr_req, resume_req,
     input dec_exec_buff_t dec_data,
     input trap_config_t trap_conf,
     input logic pma_fault_jump, ma_jump,
@@ -20,8 +21,35 @@ always_comb begin
     flush_bus.value = 0;
     trap = 0;
 
+    // Debug IRQs 
+    if (halt_req) begin
+        trap = 1;
+        flush_bus.op    = FLUSH_DEBUG_ENTRY;
+        flush_bus.cause = 32'(DCSR_CAUSE_HALTREQ);
+    end
+    else if (dec_data.control.trap_type == TRAP_EBREAK && trap_conf.dcsr.ebreakm) begin
+        trap = 1;
+        flush_bus.op    = FLUSH_DEBUG_ENTRY;
+        flush_bus.cause = 32'(DCSR_CAUSE_EBREAK);
+    end
+    else if (step_req) begin
+        trap = 1;
+        flush_bus.op    = FLUSH_DEBUG_ENTRY;
+        flush_bus.cause = 32'(DCSR_CAUSE_STEP);
+    end
+    else if (haltonr_req) begin
+        trap = 1;
+        flush_bus.op    = FLUSH_DEBUG_ENTRY;
+        flush_bus.cause = 32'(DCSR_CAUSE_RESETHALTREQ);
+    end
+    else if (resume_req) begin
+        trap = 1;
+        flush_bus.op    = FLUSH_DEBUG_RETURN;
+        flush_bus.from = trap_conf.dpc;
+        flush_bus.to = trap_conf.dpc;
+    end
     // IRQs
-    if (meip && trap_conf.mstatus.mie && trap_conf.mie.meie) begin
+    else if (meip && trap_conf.mstatus.mie && trap_conf.mie.meie) begin
         trap = 1;
         flush_bus.cause = CAUSE_EXT_IRQ;
     end

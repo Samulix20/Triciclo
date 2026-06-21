@@ -19,6 +19,9 @@
 #include "Vtop.h"
 #include "Vtop__Dpi.h"
 #include "Vtop_top.h"
+#include "Vtop_triciclo__P5_PBz1.h"   // ← añadir este include
+#include "Vtop_csr_file.h"             // ← y este
+
 
 #include "rvtarget.h"
 
@@ -276,6 +279,41 @@ i32 dpi_sifive_uart_pending() {
     return serial_buff.size();
 }
 
+// Debug functions
+
+void dbg_halt(Vtop* dut) {
+    // halt_request=1, resumeACK=1 (bloqueado mientras para)
+    dut->top->dbg_core_control = (1 << 3) | (1 << 0);
+}
+
+void dbg_resume(Vtop* dut) {
+    // halt_request=0, resumeACK=0 → la FSM detecta !resumeACK y pasa a RRESUMING
+    dut->top->dbg_core_control = 0;
+}
+
+// Y cuando el core confirme que está running, volver a poner resumeACK=1
+// para que no intente reanudar de nuevo
+void dbg_idle(Vtop* dut) {
+    dut->top->dbg_core_control = (1 << 0); // solo resumeACK=1, idle
+}
+
+
+bool dbg_is_halted(Vtop* dut) {
+    // halted = bit 2 de dbg_core_status
+    return (dut->top->dbg_core_status >> 2) & 1;
+}
+
+bool dbg_is_running(Vtop* dut) {
+    // running = bit 3 de dbg_core_status
+    return (dut->top->dbg_core_status >> 3) & 1;
+}
+
+
+
+
+
+
+
 int main(int argc, char** argv) {
     // Evaluate Verilator comand args
     Verilated::commandArgs(argc, argv);
@@ -335,6 +373,14 @@ int main(int argc, char** argv) {
         m_trace->open("waveform.vcd");
     #endif
 
+
+    bool debug_halt_sent    = false;
+    bool debug_resume_sent  = false;
+    u64  halt_at_time       = 30;   // ciclo en el que parar
+    u64  resume_at_time     = 0;
+    dut->top->dbg_core_control = (1 << 0);
+
+
     while (max_sim_time == 0 || sim_time < max_sim_time) {
         
         // Clk Toggle
@@ -342,6 +388,45 @@ int main(int argc, char** argv) {
         // Reset signal
         bool reset_on = sim_time <= 4;
         dut->resetn = u8(!reset_on);
+
+        // Debug test
+        if (!reset_on && dut->clk == 1) {
+
+            // 1. Pedir halt
+            if (sim_time == halt_at_time && !debug_halt_sent) {
+                dut->top->dbg_core_control = (1 << 3) | (1 << 0); // halt_req=1, resumeACK=1
+                debug_halt_sent = true;
+            }
+
+            // 2. Esperar confirmación de halt
+            if (debug_halt_sent && !debug_resume_sent && dbg_is_halted(dut)) {
+                if (resume_at_time == 0) {
+                    std::cout << "[DBG] Halted at sim_time=" << sim_time << "\n";
+                    // Quitar halt_request pero mantener resumeACK=1 (bloqueado)
+                    dut->top->dbg_core_control = (1 << 0);
+                    resume_at_time = sim_time + 200;
+                }
+            }
+
+            // 3. Reanudar: bajar resumeACK a 0
+            if (resume_at_time > 0 && sim_time >= resume_at_time && !debug_resume_sent) {
+                dut->top->dbg_core_control = 0; // resumeACK=0 → dispara resume
+                debug_resume_sent = true;
+            }
+
+            // 4. Confirmar running, volver a reposo
+            if (debug_resume_sent && dbg_is_running(dut)) {
+                std::cout << "[DBG] Resumed at sim_time=" << sim_time << "\n";
+                dut->top->dbg_core_control = (1 << 0); // resumeACK=1, reposo
+                debug_resume_sent = false;
+                debug_halt_sent = false;
+                resume_at_time = 0;
+            }
+        }
+        // Fin debug test
+
+
+
 
         // Simulation (2 eval to sync DPI better)
         dut->eval();
