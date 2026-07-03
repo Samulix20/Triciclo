@@ -54,14 +54,30 @@ logic instr_ret;
 
 // Debug
 logic halt_req, step_req, haltonr_req, resume_req, dbg_reset;
-logic fetch_enable;
+logic fetch_enable, dbg_reg_enable;
+
+logic exec_pb;
+
+rv_reg_id_t [CORE_RF_NUM_READ - 1:0] muxed_rf_read_ids;
+rf_write_request_t muxed_rf_write_req;
+
+always_comb begin
+    if (dbg_reg_enable) begin
+        muxed_rf_read_ids[0] = dbg_core_control.read_request;
+        muxed_rf_read_ids[1] = '0;
+        muxed_rf_write_req   = dbg_core_control.write_request;
+    end else begin
+        muxed_rf_read_ids  = rf_read_ids;
+        muxed_rf_write_req = rf_write_req;
+    end
+end
 
 reg_file #(
     .NUM_READ_PORTS(CORE_RF_NUM_READ)
 ) rf (
     .clk(clk),
-    .rs(rf_read_ids), .o(rf_data),
-    .write_request(rf_write_req)
+    .rs(muxed_rf_read_ids), .o(rf_data),
+    .write_request(muxed_rf_write_req)
 );
 
 csr_file csr_file (
@@ -74,6 +90,7 @@ csr_file csr_file (
 
 fetch fetch (
     .clk(clk), .resetn(dbg_reset), .enable(fetch_enable),
+    .exec_pb(exec_pb),
     .instr_req(instr_mem_req), .req_ack(iport_icb_req_ready),
     .dec_ready(dec_ready), .fetch_dec_buff(fetch_dec_buff),
     .flush_bus(flush_bus)
@@ -110,12 +127,15 @@ dbg dbg (
     .flush_bus        (flush_bus),
     .instr_ret        (instr_ret),
     .trap_conf        (trap_conf),
+    .read_data        (rf_data[0]),
     .halt_req         (halt_req),
     .step_req         (step_req),
     .haltonr_req      (haltonr_req),
     .resume_req       (resume_req),
     .dbg_reset        (dbg_reset),
-    .fetch_enable     (fetch_enable)
+    .fetch_enable     (fetch_enable),
+    .dbg_reg_enable   (dbg_reg_enable),
+    .exec_pb          (exec_pb)
 );
 
 endmodule

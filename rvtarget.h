@@ -17,18 +17,26 @@
 #define EXIT_STATUS_ADDR  0x10010000
 #define EXIT_STATUS_REG   *((volatile uint32_t *) EXIT_STATUS_ADDR)
 
-// Serial emulator
-#define SERIAL_BASE_ADDR        0x10000000
-// Transmiter
-#define SERIAL_TX_DATA_ADDR     (SERIAL_BASE_ADDR + 4 * 0)
-#define SERIAL_TX_DATA          *((volatile uint32_t *) SERIAL_TX_DATA_ADDR)
-#define SERIAL_TX_STATUS_ADDR   (SERIAL_BASE_ADDR + 4 * 1)
-#define SERIAL_TX_STATUS        *((volatile uint32_t *) SERIAL_TX_STATUS_ADDR)
-// Receiver
-#define SERIAL_RX_DATA_ADDR     (SERIAL_BASE_ADDR + 4 * 2)
-#define SERIAL_RX_DATA          *((volatile uint32_t *) SERIAL_RX_DATA_ADDR)
-#define SERIAL_RX_STATUS_ADDR   (SERIAL_BASE_ADDR + 4 * 3)
-#define SERIAL_RX_STATUS        *((volatile uint32_t *) SERIAL_RX_STATUS_ADDR)
+
+#define SERIAL_BASE_ADDR        0x20000000
+
+#define SERIAL_TXDATA_ADDR      (SERIAL_BASE_ADDR + 0x00)
+#define SERIAL_TXDATA           *((volatile uint32_t *) SERIAL_TXDATA_ADDR)
+#define SERIAL_RXDATA_ADDR      (SERIAL_BASE_ADDR + 0x04)
+#define SERIAL_RXDATA           *((volatile uint32_t *) SERIAL_RXDATA_ADDR)
+#define SERIAL_TXCTRL_ADDR      (SERIAL_BASE_ADDR + 0x08)
+#define SERIAL_TXCTRL           *((volatile uint32_t *) SERIAL_TXCTRL_ADDR)
+#define SERIAL_RXCTRL_ADDR      (SERIAL_BASE_ADDR + 0x0C)
+#define SERIAL_RXCTRL           *((volatile uint32_t *) SERIAL_RXCTRL_ADDR)
+#define SERIAL_IE_ADDR          (SERIAL_BASE_ADDR + 0x10)
+#define SERIAL_IE                *((volatile uint32_t *) SERIAL_IE_ADDR)
+#define SERIAL_IP_ADDR          (SERIAL_BASE_ADDR + 0x14)
+#define SERIAL_IP                *((volatile uint32_t *) SERIAL_IP_ADDR)
+#define SERIAL_DIV_ADDR         (SERIAL_BASE_ADDR + 0x18)
+#define SERIAL_DIV                *((volatile uint32_t *) SERIAL_DIV_ADDR)
+
+
+#define SERIAL_RXDATA_EMPTY_BIT  (1u << 31)
 
 // Debug
 #define DEBUG_REQ_ADDR    0x10030000

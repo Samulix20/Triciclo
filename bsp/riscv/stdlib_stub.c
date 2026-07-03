@@ -52,17 +52,41 @@ int _getpid(void) {
     return 1;
 }
 
+// int _read(int file, char *ptr, int len) {
+
+//     int bytes_read = 0;
+
+//     if (file == 0) {
+
+//         // Read is blocking, busy wait
+//         while (bytes_read == 0) {
+
+//             while(SERIAL_RX_STATUS > 0 && bytes_read < len) {
+//                 ptr[bytes_read] = SERIAL_RX_DATA;
+//                 bytes_read++;
+//             }
+
+//         }
+
+//     }
+
+//     return bytes_read;
+// }
+
 int _read(int file, char *ptr, int len) {
 
     int bytes_read = 0;
 
     if (file == 0) {
 
-        // Read is blocking, busy wait
+        // Read is blocking, busy wait.
         while (bytes_read == 0) {
 
-            while(SERIAL_RX_STATUS > 0 && bytes_read < len) {
-                ptr[bytes_read] = SERIAL_RX_DATA;
+            while (bytes_read < len) {
+                u32 rx = SERIAL_RXDATA;
+                if (rx & SERIAL_RXDATA_EMPTY_BIT) break;
+
+                ptr[bytes_read] = (char) (rx & 0xFF);
                 bytes_read++;
             }
 
@@ -103,6 +127,26 @@ int _lseek(int file, int ptr, int dir) {
     return 0;
 }
 
+// int _write(int fd, const void* buf, size_t count) {
+
+//     size_t bytes_written = 0;
+
+//     // stdout and stderr
+//     if (fd == 1 || fd == 2) {
+//         char* char_buf = (char*) buf;
+//         for(size_t i = 0; i < count; i++) {
+
+//             // Wait for transmitter ready
+//             while (SERIAL_TX_STATUS == 0);
+
+//             SERIAL_TX_DATA = char_buf[i];
+//             bytes_written++;
+//         }
+//     } 
+
+//     return bytes_written;
+// }
+
 int _write(int fd, const void* buf, size_t count) {
 
     size_t bytes_written = 0;
@@ -111,11 +155,7 @@ int _write(int fd, const void* buf, size_t count) {
     if (fd == 1 || fd == 2) {
         char* char_buf = (char*) buf;
         for(size_t i = 0; i < count; i++) {
-
-            // Wait for transmitter ready
-            while (SERIAL_TX_STATUS == 0);
-
-            SERIAL_TX_DATA = char_buf[i];
+            SERIAL_TXDATA = (unsigned char) char_buf[i];
             bytes_written++;
         }
     } 

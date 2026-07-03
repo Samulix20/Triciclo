@@ -246,25 +246,6 @@ typedef enum logic [2:0] {
 } dcsr_cause_t;
 
 
-typedef struct packed {
-    logic   abs_end;    // [4]
-    logic   running;    // [3]
-    logic   halted;     // [2]
-    logic   havereset;  // [1]
-    logic   resumeACK;  // [0]
-} dbg_core_status_t /*verilator public*/;
-
-
-typedef struct packed {
-    logic   pb_exec;        // [4]
-    logic   halt_request;   // [3]
-    logic   hart_reset;     // [2]
-    logic   reset_request;  // [1]
-    logic   resumeACK;      // [0]
-} dbg_core_control_t /*verilator public*/;
-
-
-
 // Core Config
 
 // Register file num outputs
@@ -625,5 +606,35 @@ function automatic void mem_req_to_bus_req (
         default: begin end
     endcase
 endfunction
+
+typedef struct packed {
+    l32     reg_read;
+    logic   abs_end;    // [4]
+    logic   running;    // [3]
+    logic   halted;     // [2]
+    logic   havereset;  // [1]
+    logic   resumeACK;  // [0]
+} dbg_core_status_t /*verilator public*/;
+
+
+typedef struct packed {
+    logic   abs_access_reg;
+    rf_write_request_t write_request;
+    rv_reg_id_t read_request;
+    logic   pb_exec;        // [4]
+    logic   halt_request;   // [3]
+    logic   hart_reset;     // [2]
+    logic   reset_request;  // [1]
+    logic   resumeACK;      // [0]
+} dbg_core_control_t /*verilator public*/;
+
+
+typedef struct packed {
+    logic [7:0] DM_write_id;
+    l32 DM_write_data;
+    logic DM_write;
+} dbg_write_request_t;
+
+
 
 endpackage

@@ -392,32 +392,31 @@ int main(int argc, char** argv) {
         // Debug test
         if (!reset_on && dut->clk == 1) {
 
-            // 1. Pedir halt
+            // Pedir halt
             if (sim_time == halt_at_time && !debug_halt_sent) {
                 dut->top->dbg_core_control = (1 << 3) | (1 << 0); // halt_req=1, resumeACK=1
                 debug_halt_sent = true;
             }
 
-            // 2. Esperar confirmación de halt
+            // Esperar confirmación de halt
             if (debug_halt_sent && !debug_resume_sent && dbg_is_halted(dut)) {
                 if (resume_at_time == 0) {
                     std::cout << "[DBG] Halted at sim_time=" << sim_time << "\n";
-                    // Quitar halt_request pero mantener resumeACK=1 (bloqueado)
                     dut->top->dbg_core_control = (1 << 0);
                     resume_at_time = sim_time + 200;
                 }
             }
 
-            // 3. Reanudar: bajar resumeACK a 0
+            // Reanudar: bajar resumeACK a 0
             if (resume_at_time > 0 && sim_time >= resume_at_time && !debug_resume_sent) {
-                dut->top->dbg_core_control = 0; // resumeACK=0 → dispara resume
+                dut->top->dbg_core_control = 0; // resumeACK=0
                 debug_resume_sent = true;
             }
 
-            // 4. Confirmar running, volver a reposo
+            // Confirmar running, volver a reposo
             if (debug_resume_sent && dbg_is_running(dut)) {
                 std::cout << "[DBG] Resumed at sim_time=" << sim_time << "\n";
-                dut->top->dbg_core_control = (1 << 0); // resumeACK=1, reposo
+                dut->top->dbg_core_control = (1 << 0); // resumeACK=1
                 debug_resume_sent = false;
                 debug_halt_sent = false;
                 resume_at_time = 0;
