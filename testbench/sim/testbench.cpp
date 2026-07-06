@@ -281,6 +281,7 @@ int main(int argc, char** argv) {
     Verilated::commandArgs(argc, argv);
 
     u64 max_sim_time = 0;
+    std::string waveform_filename = "waveform.vcd";
 
     // Evaluate our command args
     for(i32 i = 1; i < argc; i++) {
@@ -295,6 +296,11 @@ int main(int argc, char** argv) {
             i++;
             if (i == argc) break;
             load_bin(argv[i]);
+        }
+        else if (arg == "--wave") {
+            i++;
+            if (i == argc) break;
+            waveform_filename = argv[i];
         }
         else if (arg == "--max-time") {
             i++;
@@ -332,7 +338,7 @@ int main(int argc, char** argv) {
         Verilated::traceEverOn(true);
         m_trace = new VerilatedVcdC;
         dut->trace(m_trace, 100);
-        m_trace->open("waveform.vcd");
+        m_trace->open(waveform_filename.c_str());
     #endif
 
     while (max_sim_time == 0 || sim_time < max_sim_time) {
@@ -343,10 +349,8 @@ int main(int argc, char** argv) {
         bool reset_on = sim_time <= 4;
         dut->resetn = u8(!reset_on);
 
-        // Simulation (2 eval to sync DPI better)
+        // Simulation
         dut->eval();
-
-        //if (sim_time % 100000 == 0) std::cout << "ST " << sim_time << '\n'; 
     
         #ifdef TRACE_WAVE
             // Trace signals

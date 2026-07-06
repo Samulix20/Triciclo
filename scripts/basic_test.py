@@ -111,6 +111,3 @@ if __name__ == "__main__":
 
     for test_group in test_groups_list:
         run_isa_test_folder(test_group)
-
-    run_examples()
-

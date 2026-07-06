@@ -43,12 +43,18 @@ clean:
 	rm -rf *.vcd *.dump
 	rm -rf obj_dir build
 
-linux: clean
+run_linux: clean
 	make
 	./obj_dir/Vtop -b examples/linux/Image --echo --it
 
-kernel:
-	cd examples/linux; make all
+cinit:
+	cd examples/linux; make all_cinit
 
-kernelconf:
-	cd examples/linux; make menuconfig
+busybox:
+	cd examples/linux; make all_busybox
+
+kconf:
+	cd examples/linux; make kconf
+
+bbconf:
+	cd examples/linux; make bbconf
