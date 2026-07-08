@@ -9,8 +9,10 @@ import triciclo_pkg::*;
 (
     input logic clk, resetn,
 
-    input dbg_core_control_t dbg_core_control,
-    output dbg_core_status_t  dbg_core_status
+    // Interfaz DMI
+    input  dbg_write_request_t DMI_write_req,
+    input  logic [7:0]         DMI_read_id,
+    output l32                 DMI_read_value
 );
 
 localparam int fast_net_len = 5;
@@ -38,6 +40,10 @@ l64 mtime_val;
 `ICB_BUS(iport_bus, 32, 32, 4);
 `ICB_BUS(dport_bus, 32, 32, 4);
 
+// Señales de debug entre el core y el debug_module
+dbg_core_control_t core_dbg_control;
+dbg_core_status_t  core_dbg_status;
+
 triciclo  # (
     .HARDTID(0),
     .PMA_REGS(fast_net_len), .PMA_CONF(fast_net_conf)
@@ -46,7 +52,7 @@ triciclo  # (
     // IRQs
     .mtip(mtip), .msip(0), .meip(meip),
     // Debug
-    .dbg_core_control(dbg_core_control), .dbg_core_status(dbg_core_status),
+    .dbg_core_control(core_dbg_control), .dbg_core_status(core_dbg_status),
     // Instruction
     `ICB_BUS_CONNECT(iport, iport_bus),
     // Data
@@ -66,21 +72,36 @@ icb_net #(
 );
 
 
-// Program buffer
-dbg_write_request_t pb_dm_write_unused;
-assign pb_dm_write_unused = '0;
-
-logic [7:0] pb_dm_read_id_unused;
-assign pb_dm_read_id_unused = '0;
-
-l32 pb_dm_read_data_unused;
+// Program buffer <-> Debug Module
+dbg_write_request_t pb_dm_write;
+logic [7:0]          pb_dm_read_id;
+l32                  pb_dm_read_data;
 
 program_buffer dbg_program_buffer (
     .clk(clk), .resetn(resetn),
     `ICB_BUS_CONNECT_ARRAY(slv, instr_net_array, 0),
-    .dm_write(pb_dm_write_unused),
-    .dm_read_id(pb_dm_read_id_unused),
-    .dm_read_data(pb_dm_read_data_unused)
+    .dm_write(pb_dm_write),
+    .dm_read_id(pb_dm_read_id),
+    .dm_read_data(pb_dm_read_data)
+);
+
+// Debug Module
+debug_module dbg_module (
+    .clk(clk),
+
+    // DMI
+    .DMI_write_req (DMI_write_req),
+    .DMI_read_id   (DMI_read_id),
+    .DMI_read_value(DMI_read_value),
+
+    // Hacia el core
+    .core_status (core_dbg_status),
+    .core_control(core_dbg_control),
+
+    // Hacia el Program Buffer
+    .PB_write_req (pb_dm_write),
+    .PB_read_id   (pb_dm_read_id),
+    .PB_read_data (pb_dm_read_data)
 );
 
 
@@ -136,10 +157,5 @@ amo_mem main_data_memory (
     `ICB_BUS_CONNECT_ARRAY(slv, fast_net_array, 0)
 );
 
-
-// always_comb begin
-//     dbg_core_control <= '0;
-//     dbg_core_control.resumeACK <= 1;  // reposo: bloqueado
-// end
 
 endmodule

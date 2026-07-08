@@ -1,5 +1,6 @@
 /* verilator lint_off UNUSEDPARAM */
 /* verilator lint_off UNUSEDSIGNAL */
+/* verilator lint_off UNOPTFLAT */
 
 `include "icb.svh"
 

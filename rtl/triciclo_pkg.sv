@@ -609,23 +609,20 @@ endfunction
 
 typedef struct packed {
     l32     reg_read;
-    logic   abs_end;    // [4]
-    logic   running;    // [3]
-    logic   halted;     // [2]
-    logic   havereset;  // [1]
+    logic   running;    // [2]
+    logic   halted;     // [1]
     logic   resumeACK;  // [0]
 } dbg_core_status_t /*verilator public*/;
 
 
 typedef struct packed {
-    logic   abs_access_reg;
     rf_write_request_t write_request;
     rv_reg_id_t read_request;
     logic   pb_exec;        // [4]
     logic   halt_request;   // [3]
     logic   hart_reset;     // [2]
     logic   reset_request;  // [1]
-    logic   resumeACK;      // [0]
+    logic   resume_request;      // [0]
 } dbg_core_control_t /*verilator public*/;
 
 
