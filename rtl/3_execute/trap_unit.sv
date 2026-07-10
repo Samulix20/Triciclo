@@ -4,7 +4,7 @@ module trap_unit
 import triciclo_pkg::*;
 (
     input logic mtip, msip, meip,
-    input logic halt_req, step_req, haltonr_req, resume_req,
+    input logic halt_req, step_req, haltonr_req, resume_req, pb_resume_req,
     input dec_exec_buff_t dec_data,
     input trap_config_t trap_conf,
     input logic pma_fault_jump, ma_jump,
@@ -27,7 +27,7 @@ always_comb begin
         flush_bus.op    = FLUSH_DEBUG_ENTRY;
         flush_bus.cause = 32'(DCSR_CAUSE_HALTREQ);
     end
-    else if (dec_data.control.trap_type == TRAP_EBREAK && trap_conf.dcsr.ebreakm) begin
+    else if (dec_data.control.trap_type == TRAP_EBREAK && (trap_conf.dcsr.ebreakm || trap_conf.current_mode == MODE_DEBUG)) begin
         trap = 1;
         flush_bus.op    = FLUSH_DEBUG_ENTRY;
         flush_bus.cause = 32'(DCSR_CAUSE_EBREAK);
@@ -45,6 +45,12 @@ always_comb begin
     else if (resume_req) begin
         trap = 1;
         flush_bus.op    = FLUSH_DEBUG_RETURN;
+        flush_bus.from = trap_conf.dpc;
+        flush_bus.to = trap_conf.dpc;
+    end
+    else if (pb_resume_req) begin
+        trap = 1;
+        flush_bus.op    = FLUSH_DEBUG_PB_RETURN;
         flush_bus.from = trap_conf.dpc;
         flush_bus.to = trap_conf.dpc;
     end

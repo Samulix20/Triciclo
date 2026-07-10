@@ -155,21 +155,26 @@ always_ff @(posedge clk) begin
     if (!resetn) begin 
         pc <= RESET_PC;
         dec_exec_buff.control <= create_nop_ctrl();
+        dec_exec_buff.pc <= RESET_PC;
     end 
+    else if (flush_bus.op != NO_FLUSH) begin
+        // Flush on !enable
+        pc <= flush_bus.to;
+        dec_exec_buff.control <= create_nop_ctrl();
+        dec_exec_buff.pc <= flush_bus.to;
+    end
     else if (enable) begin 
-        // Flush the buffer
-        if (flush_bus.op != NO_FLUSH) begin 
-            pc <= flush_bus.to;
-            dec_exec_buff.control <= create_nop_ctrl();
-        end
-        else if (exec_ready) begin
+        if (exec_ready) begin
             // Instruction was decoded
             if (dec_valid) begin 
                 pc <= pc4;
                 dec_exec_buff <= ibuff;
             end
             // Exec its ready but no instruction decoded, send bubble
-            else dec_exec_buff.control <= create_nop_ctrl();
+            else begin
+                dec_exec_buff.control <= create_nop_ctrl();
+                dec_exec_buff.pc <= pc;
+            end
         end
     end
 end

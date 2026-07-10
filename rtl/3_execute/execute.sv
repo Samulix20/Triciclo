@@ -31,7 +31,7 @@ import triciclo_pkg::*;
 
     // Traps
     input logic mtip, msip, meip,
-    input logic halt_req, step_req, haltonr_req, resume_req,
+    input logic halt_req, step_req, haltonr_req, resume_req, pb_resume_req,
     input trap_config_t trap_conf
 );
 
@@ -162,7 +162,7 @@ flush_bus_t trap_flush_bus;
 
 trap_unit trap_unit (
     .mtip(mtip), .msip(msip), .meip(meip), 
-    .halt_req(halt_req), .step_req(step_req), .haltonr_req(haltonr_req), .resume_req(resume_req),
+    .halt_req(halt_req), .step_req(step_req), .haltonr_req(haltonr_req), .resume_req(resume_req), .pb_resume_req(pb_resume_req),
     .ma_jump(ma_jump), .pma_fault_jump(pma_fault_jump), 
     .alu_result(int_alu_out),
     .dec_data(dec_data), .trap_conf(trap_conf),

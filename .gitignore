@@ -1,6 +1,7 @@
 
 # External modules
-modules
+modules/*
+!modules/debug_module
 examples/linux
 
 # Build directories

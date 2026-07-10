@@ -12,8 +12,8 @@ module dbg
     input flush_bus_t flush_bus,
     input logic instr_ret,
     input trap_config_t trap_conf,
-    input l32 read_data,
-    output logic halt_req, step_req, haltonr_req, resume_req, dbg_reset,
+    input l32 read_data, csr_read_data,
+    output logic halt_req, step_req, haltonr_req, resume_req, pb_resume_req, dbg_reset,
     output logic fetch_enable, dbg_reg_enable, exec_pb
  
 
@@ -41,7 +41,7 @@ dbg_state_t state, state_next;
 
 
 assign fetch_enable  = (!(state == DBG_HALTED || state == DBG_RESUMING || state == DBG_STEP_REQ || state == DBG_RESUME_PB));
-assign dbg_reset  = (dbg_core_control.hart_reset || dbg_core_control.reset_request || resetn);
+assign dbg_reset = resetn && !(dbg_core_control.hart_reset || dbg_core_control.reset_request);
 assign dbg_reg_enable = (state == DBG_HALTED);
 assign exec_pb = (state == DBG_RESUME_PB || state == DBG_EXEC_PB);
 
@@ -63,6 +63,8 @@ always_comb begin
             else if ((dbg_core_control.hart_reset || dbg_core_control.reset_request) && !dbg_core_control.halt_request)
                 state_next = DBG_RUNNING;
             else if ((dbg_core_control.hart_reset || dbg_core_control.reset_request) && dbg_core_control.halt_request)
+                state_next = DBG_HALTED;
+            else if (flush_bus.op == FLUSH_DEBUG_ENTRY)
                 state_next = DBG_HALTED;
         end
  
@@ -105,7 +107,7 @@ always_comb begin
         end
 
         DBG_RESUME_PB: begin
-            if (flush_bus.op == FLUSH_DEBUG_RETURN)
+            if (flush_bus.op == FLUSH_DEBUG_PB_RETURN)
                 state_next = DBG_EXEC_PB;
         end
 
@@ -126,10 +128,12 @@ always_comb begin
     dbg_core_status.halted = 0;
     dbg_core_status.resumeACK = 0;
     dbg_core_status.reg_read = read_data;
+    dbg_core_status.csr_read = csr_read_data;
     halt_req = 0;
     step_req = 0;
     haltonr_req = 0;
     resume_req = 0;
+    pb_resume_req = 0;
     
 
     if (!resetn) begin
@@ -201,18 +205,16 @@ always_comb begin
             
 
             // Traps
-            resume_req = 1;
+            pb_resume_req = 1;
 
         end
 
 
         DBG_EXEC_PB: begin
             // Core status
-            dbg_core_status.running = 1;
             
 
             // Traps
-            halt_req = 1;
         end
  
         default: begin

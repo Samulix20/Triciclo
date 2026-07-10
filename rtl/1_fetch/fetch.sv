@@ -49,15 +49,16 @@ always_ff @(posedge clk) begin
         exec_pb_prev <= 0;
         fetch_dec_buff.valid <= 0;
     end
+    else if (flush_bus.op != NO_FLUSH) begin
+        // Flush with !enable (flush on halt)
+        pc <= flush_bus.to;
+        fetch_dec_buff.valid <= 0;
+        exec_pb_prev <= exec_pb;
+    end
     else if (enable) begin
         exec_pb_prev <= exec_pb;
 
-        if (flush_bus.op != NO_FLUSH) begin 
-            pc <= flush_bus.to;
-            fetch_dec_buff.valid <= 0;
-        end
-        else if (exec_pb_rising) begin
-            // Reset de la ejecución del pb
+        if (exec_pb_rising) begin
             pb_pc <= 0;
             fetch_dec_buff.valid <= 0;
         end

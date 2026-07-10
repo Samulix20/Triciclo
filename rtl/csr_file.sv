@@ -134,11 +134,16 @@ always_ff @(posedge clk) begin
             dcsr.cause <= flush_bus.cause[2:0];
             dpc <= flush_bus.from;
             current_mode <= MODE_DEBUG;
+            dcsr.prv <= current_mode;
         end
 
         // Debug mode exit
         else if (flush_bus.op == FLUSH_DEBUG_RETURN) begin
             current_mode <= priv_mode_t'(dcsr.prv);
+        end
+        // Resume without mode change (for program buffer execution)
+        else if (flush_bus.op == FLUSH_DEBUG_PB_RETURN) begin
+            current_mode <= MODE_DEBUG;
         end
 
         else if (csr_write_req.write_enable) begin

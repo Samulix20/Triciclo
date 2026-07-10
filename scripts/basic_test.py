@@ -83,6 +83,64 @@ def run_isa_test_folder(folder):
     
     print_results(num_test, num_pass, num_fail)
 
+
+# Debug Module tests
+
+dbg_test_buildir = "build/dbg_tests"
+
+dbg_tests_list = [
+    "halt_resume",
+    "abs_gpr_rw",
+    "abs_command_error_running",
+    "pb_write_read",
+    "pb_exec_single_instr",
+    "pb_exec_multi_instr",
+    "csr_dpc_dcsr_rw_sanity",
+    "step_single_instruction",
+    "step_multiple_instructions",
+    "step_disabled_runs_freely",
+]
+
+def run_dbg_test(testname):
+    os.system(f"mkdir -p {dbg_test_buildir}")
+    test_res_path = f"{dbg_test_buildir}/._dbg_test_res_{testname}.yaml"
+
+    os.system(f"""
+        ./obj_dir/Vtop --dbg-test {testname} --prof "{test_res_path}" --max-time 200000
+    """)
+
+    test_result = -1
+    with open(test_res_path, 'r') as file:
+        test_result = yaml.safe_load(file)
+        if test_result is None:
+            test_result = 255
+        else:
+            test_result = test_result['exit_status']
+
+    if test_result != 0:
+        print(f"{RED}TEST: {testname} FAILED{NC}")
+        print(f"EXIT STATUS {test_result}")
+        print("")
+        return False
+
+    return True
+
+def run_dbg_test_suite():
+    num_pass = 0
+    num_fail = 0
+    num_test = 0
+
+    print(f"{BOLD}STARTING DEBUG MODULE TESTS...{NC}")
+
+    for test in dbg_tests_list:
+        num_test += 1
+        if run_dbg_test(test):
+            num_pass += 1
+        else:
+            num_fail += 1
+
+    print_results(num_test, num_pass, num_fail)
+
 examples_path = "examples"
 example_projects = [
     "c_hello_world", 
@@ -112,5 +170,6 @@ if __name__ == "__main__":
     for test_group in test_groups_list:
         run_isa_test_folder(test_group)
 
-    run_examples()
+    run_dbg_test_suite()
 
+    run_examples()

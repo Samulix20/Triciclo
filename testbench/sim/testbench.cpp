@@ -18,8 +18,9 @@
 #include "Vtop.h"
 #include "Vtop__Dpi.h"
 #include "Vtop_top.h"
-#include "Vtop_triciclo__P5_PBz1.h"   // ← añadir este include
-#include "Vtop_csr_file.h"             // ← y este
+#include "Vtop_triciclo__P5_PBz1.h"
+#include "Vtop_csr_file.h"
+#include "Vtop_debug_module.h"
 
 
 #include "rvtarget.h"
@@ -33,6 +34,7 @@ using i16 = int16_t;
 using u16 = uint16_t;
 using i8 = int8_t;
 using u8 = uint8_t;
+#include "dbg_testbench.h"
 
 // Simulation context globals
 
@@ -278,64 +280,13 @@ i32 dpi_sifive_uart_pending() {
     return serial_buff.size();
 }
 
-// DMI
-constexpr u8 DMI_DM_CONTROL = 0x10;
-constexpr u8 DMI_DM_STATUS  = 0x11;
-
-// Bits de dmcontrol_t
-constexpr u32 DMCTRL_HALTREQ   = (1u << 31);
-constexpr u32 DMCTRL_RESUMEREQ = (1u << 30);
-constexpr u32 DMCTRL_DMACTIVE  = (1u << 0);
-
-// Bits de dmstatus_t
-constexpr u32 DMSTATUS_ALLRESUMEACK = (1u << 17);
-constexpr u32 DMSTATUS_ALLRUNNING   = (1u << 11);
-constexpr u32 DMSTATUS_ALLHALTED    = (1u << 9);
-
-// Escritura DMI
-void dmi_write(Vtop* dut, u8 addr, u32 data) {
-    u64 raw = (u64(addr) << 33) | (u64(data) << 1) | u64(1);
-    dut->top->DMI_write_req = raw;
-}
-
-// Deja el bus DMI en reposo (DM_write = 0).
-void dmi_idle(Vtop* dut) {
-    dut->top->DMI_write_req = 0;
-}
-
-
-void dmi_set_read_addr(Vtop* dut, u8 addr) {
-    dut->top->DMI_read_id = addr;
-}
-
-u32 dmi_read_value(Vtop* dut) {
-    return u32(dut->top->DMI_read_value);
-}
-
-// FSM de las pruebas de debug
-enum class dbg_test_state_e {
-    WAIT_START,
-    ACTIVATE_PULSE,
-    ACTIVATE_HOLD,
-    HALT_PULSE,
-    WAIT_HALTED,
-    HALTED_HOLD,
-    RESUME_PULSE,
-    WAIT_RESUMED,
-    DONE
-};
-
-
-
-
-
-
-
 int main(int argc, char** argv) {
     // Evaluate Verilator comand args
     Verilated::commandArgs(argc, argv);
 
     u64 max_sim_time = 0;
+    bool dbg_test_mode = false;
+    std::string dbg_test_name = "all";
 
     // Evaluate our command args
     for(i32 i = 1; i < argc; i++) {
@@ -377,6 +328,13 @@ int main(int argc, char** argv) {
             t.detach();
             io_thread_started = true;
         }
+        else if (arg == "--dbg-test") {
+            dbg_test_mode = true;
+            if (i + 1 < argc && argv[i + 1][0] != '-') {
+                i++;
+                dbg_test_name = argv[i];
+            }
+        }
         
     }
 
@@ -391,15 +349,30 @@ int main(int argc, char** argv) {
     #endif
 
 
-    dbg_test_state_e dbg_state = dbg_test_state_e::WAIT_START;
-    u64  dbg_state_enter_time  = 0;
-    const u64 halt_at_time     = 30;   // ciclo en el que se pide el halt
-    const u64 halted_hold_time = 200;  // ciclos que se mantiene parado antes de reanudar
+    // Debug test mode (replaces normal loop for debug tests)
+    if (dbg_test_mode) {
+        if (dpi_mem_array == nullptr) {
+            dpi_mem_size = 4096;
+            dpi_mem_array = new u8[dpi_mem_size]();
+        }
+        if (dpi_bootrom_array == nullptr) {
+            dpi_bootrom_size = 4096;
+            dpi_bootrom_array = new u8[dpi_bootrom_size]();
+        }
 
-    // DMI en reposo hasta que arranque el test
-    dut->top->DMI_write_req = 0;
-    dut->top->DMI_read_id   = 0;
+        dut->clk = 0;
+        dut->DMI_write_req = 0;
+        dut->DMI_read_id   = 0;
+        
+        while (sim_time <= 5) dbg_tick();
+        while (sim_time < 30) dbg_tick();
 
+        bool success = run_dbg_tests(dbg_test_name);
+        simulation_exit(success ? 0 : 1);
+    }
+
+    dut->DMI_write_req = 0;
+    dut->DMI_read_id   = 0;
 
     while (max_sim_time == 0 || sim_time < max_sim_time) {
         
@@ -408,78 +381,6 @@ int main(int argc, char** argv) {
         // Reset signal
         bool reset_on = sim_time <= 4;
         dut->resetn = u8(!reset_on);
-
-        // Debug test (a través del DMI: activar DM -> halt -> resume)
-        if (!reset_on && dut->clk == 1) {
-
-            switch (dbg_state) {
-
-                case dbg_test_state_e::WAIT_START:
-                    if (sim_time >= halt_at_time) {
-                        dmi_set_read_addr(dut, DMI_DM_STATUS);
-                        dmi_write(dut, DMI_DM_CONTROL, DMCTRL_DMACTIVE);
-                        dbg_state = dbg_test_state_e::ACTIVATE_PULSE;
-                    }
-                    break;
-
-                case dbg_test_state_e::ACTIVATE_PULSE:
-                    dmi_idle(dut);
-                    dbg_state_enter_time = sim_time;
-                    dbg_state = dbg_test_state_e::ACTIVATE_HOLD;
-                    break;
-
-                case dbg_test_state_e::ACTIVATE_HOLD:
-                    if (sim_time >= dbg_state_enter_time + 4) {
-                        std::cout << "[DBG] Debug Module activado en sim_time=" << sim_time << "\n";
-                        // Pedir halt
-                        dmi_write(dut, DMI_DM_CONTROL, DMCTRL_DMACTIVE | DMCTRL_HALTREQ);
-                        dbg_state = dbg_test_state_e::HALT_PULSE;
-                    }
-                    break;
-
-                case dbg_test_state_e::HALT_PULSE:
-                    dmi_idle(dut);
-                    dbg_state = dbg_test_state_e::WAIT_HALTED;
-                    break;
-
-                case dbg_test_state_e::WAIT_HALTED:
-                    // El debug_module limpia haltreq solo al confirmar el halt
-                    if (dmi_read_value(dut) & DMSTATUS_ALLHALTED) {
-                        std::cout << "[DBG] Halted at sim_time=" << sim_time << "\n";
-                        dbg_state_enter_time = sim_time;
-                        dbg_state = dbg_test_state_e::HALTED_HOLD;
-                    }
-                    break;
-
-                case dbg_test_state_e::HALTED_HOLD:
-                    if (sim_time >= dbg_state_enter_time + halted_hold_time) {
-                        // Pedir resume
-                        dmi_write(dut, DMI_DM_CONTROL, DMCTRL_DMACTIVE | DMCTRL_RESUMEREQ);
-                        dbg_state = dbg_test_state_e::RESUME_PULSE;
-                    }
-                    break;
-
-                case dbg_test_state_e::RESUME_PULSE:
-                    dmi_idle(dut);
-                    dbg_state = dbg_test_state_e::WAIT_RESUMED;
-                    break;
-
-                case dbg_test_state_e::WAIT_RESUMED:
-                    if (dmi_read_value(dut) & DMSTATUS_ALLRESUMEACK) {
-                        std::cout << "[DBG] Resumed at sim_time=" << sim_time << "\n";
-                        dbg_state = dbg_test_state_e::DONE;
-                    }
-                    break;
-
-                case dbg_test_state_e::DONE:
-                    // Test de debug terminado
-                    break;
-            }
-        }
-        // Fin debug test
-
-
-
 
         // Simulation (2 eval to sync DPI better)
         dut->eval();

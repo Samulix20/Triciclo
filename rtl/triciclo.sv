@@ -54,7 +54,7 @@ logic instr_ret;
 
 
 // Debug
-logic halt_req, step_req, haltonr_req, resume_req, dbg_reset;
+logic halt_req, step_req, haltonr_req, resume_req, pb_resume_req, dbg_reset;
 logic fetch_enable, dbg_reg_enable;
 
 logic exec_pb;
@@ -62,14 +62,21 @@ logic exec_pb;
 rv_reg_id_t [CORE_RF_NUM_READ - 1:0] muxed_rf_read_ids;
 rf_write_request_t muxed_rf_write_req;
 
+rv_csr_id_t muxed_csr_read_id;
+csr_write_request_t muxed_csr_write_req;
+
 always_comb begin
     if (dbg_reg_enable) begin
         muxed_rf_read_ids[0] = dbg_core_control.read_request;
         muxed_rf_read_ids[1] = '0;
         muxed_rf_write_req   = dbg_core_control.write_request;
+        muxed_csr_read_id    = dbg_core_control.csr_read_request;
+        muxed_csr_write_req  = dbg_core_control.csr_write_request;
     end else begin
         muxed_rf_read_ids  = rf_read_ids;
         muxed_rf_write_req = rf_write_req;
+        muxed_csr_read_id   = csr_read_id;
+        muxed_csr_write_req = csr_req;
     end
 end
 
@@ -83,8 +90,8 @@ reg_file #(
 
 csr_file csr_file (
     .clk(clk), .resetn(dbg_reset), .enable(enable), .instr_ret(instr_ret),
-    .read_id(csr_read_id), .read_csr(csr_data),
-    .csr_write_req(csr_req),
+    .read_id(muxed_csr_read_id), .read_csr(csr_data),
+    .csr_write_req(muxed_csr_write_req),
     .trap_conf(trap_conf),
     .flush_bus(flush_bus)
 );
@@ -115,7 +122,7 @@ execute execute (
     .mem_data(dport_icb_resp_data), .data_req_done(dport_icb_resp_valid),
     .rf_req_reg(rf_write_req), .csr_req_reg(csr_req),
     .mtip(mtip), .msip(msip), .meip(meip),
-    .halt_req(halt_req), .step_req(step_req), .haltonr_req(haltonr_req), .resume_req(resume_req),
+    .halt_req(halt_req), .step_req(step_req), .haltonr_req(haltonr_req), .resume_req(resume_req), .pb_resume_req(pb_resume_req),
     .trap_conf(trap_conf), .flush_bus(flush_bus),
     .mem_err(0)
 );
@@ -129,10 +136,12 @@ dbg dbg (
     .instr_ret        (instr_ret),
     .trap_conf        (trap_conf),
     .read_data        (rf_data[0]),
+    .csr_read_data    (csr_data),
     .halt_req         (halt_req),
     .step_req         (step_req),
     .haltonr_req      (haltonr_req),
     .resume_req       (resume_req),
+    .pb_resume_req    (pb_resume_req),
     .dbg_reset        (dbg_reset),
     .fetch_enable     (fetch_enable),
     .dbg_reg_enable   (dbg_reg_enable),

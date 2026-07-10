@@ -447,7 +447,8 @@ typedef enum logic [2:0] {
     FLUSH_TRAP,
     FLUSH_MRET,
     FLUSH_DEBUG_ENTRY,
-    FLUSH_DEBUG_RETURN
+    FLUSH_DEBUG_RETURN,
+    FLUSH_DEBUG_PB_RETURN
 } flush_type_t;
 
 typedef struct packed {
@@ -609,6 +610,7 @@ endfunction
 
 typedef struct packed {
     l32     reg_read;
+    l32     csr_read;
     logic   running;    // [2]
     logic   halted;     // [1]
     logic   resumeACK;  // [0]
@@ -618,6 +620,8 @@ typedef struct packed {
 typedef struct packed {
     rf_write_request_t write_request;
     rv_reg_id_t read_request;
+    csr_write_request_t csr_write_request;
+    rv_csr_id_t csr_read_request;
     logic   pb_exec;        // [4]
     logic   halt_request;   // [3]
     logic   hart_reset;     // [2]
