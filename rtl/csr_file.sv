@@ -62,6 +62,8 @@ always_comb begin
         CSR_MSCRATCH: read_csr = mscratch;
         CSR_MCYCLE: read_csr = mcycle[0];
         CSR_MCYCLEH: read_csr = mcycle[1];
+        CSR_MINSTRET: read_csr = minstret[0];
+        CSR_MINSTRETH: read_csr = minstret[1];
         default: begin end
     endcase
 end
