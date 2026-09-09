@@ -57,4 +57,4 @@ always_comb begin
     endcase
 end
 
-endmodule;
+endmodule
