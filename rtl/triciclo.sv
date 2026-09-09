@@ -1,9 +1,7 @@
 /* verilator lint_off UNUSEDPARAM */
 /* verilator lint_off UNUSEDSIGNAL */
 
-`include "icb.svh"
-
-module triciclo 
+module triciclo
 import triciclo_pkg::*;
 import icb_pkg::*;
 # (
@@ -13,9 +11,9 @@ import icb_pkg::*;
 ) (
     input logic clk, resetn, enable,
     // Instruction
-    `ICB_BUS_MASTER_PORT(iport, 32, 32, 4),
+    icb_if.master iport,
     // Data
-    `ICB_BUS_MASTER_PORT(dport, 32, 32, 4),
+    icb_if.master dport,
     // Pending interrupts
     input logic mtip, msip, meip
 );
@@ -23,8 +21,8 @@ import icb_pkg::*;
 mem_request_t instr_mem_req, data_mem_req;
 
 always_comb begin
-    mem_req_to_bus_req(instr_mem_req, iport_icb_req_valid, iport_icb_req_addr, iport_icb_req_data, iport_icb_req_wstrb, iport_icb_req_op);
-    mem_req_to_bus_req(data_mem_req, dport_icb_req_valid, dport_icb_req_addr, dport_icb_req_data, dport_icb_req_wstrb, dport_icb_req_op);
+    mem_req_to_bus_req(instr_mem_req, iport.req_valid, iport.req_addr, iport.req_data, iport.req_wstrb, iport.req_op);
+    mem_req_to_bus_req(data_mem_req, dport.req_valid, dport.req_addr, dport.req_data, dport.req_wstrb, dport.req_op);
 end
 
 logic dec_ready;
@@ -64,14 +62,14 @@ csr_file csr_file (
 
 fetch fetch (
     .clk(clk), .resetn(resetn), .enable(enable),
-    .instr_req(instr_mem_req), .req_ack(iport_icb_req_ready),
+    .instr_req(instr_mem_req), .req_ack(iport.req_ready),
     .dec_ready(dec_ready), .fetch_dec_buff(fetch_dec_buff),
     .flush_bus(flush_bus)
 );
 
 decode decode (
     .clk(clk), .resetn(resetn), .enable(enable),
-    .instr(iport_icb_resp_data), .instr_req_done(iport_icb_resp_valid),
+    .instr(iport.resp_data), .instr_req_done(iport.resp_valid),
     .rf_read_ids(rf_read_ids), .rf_data(rf_data),
     .csr_id(csr_read_id), .csr_data(csr_data),
     .fetch_dec_buff(fetch_dec_buff), .dec_ready(dec_ready),
@@ -85,9 +83,9 @@ execute #(
 ) execute (
     .clk(clk), .resetn(resetn), .enable(enable), .instr_ret(instr_ret),
     .dec_data(dec_exec_buff), .exec_ready(exec_ready),
-    .data_req(data_mem_req), .data_req_ack(dport_icb_req_ready), 
-    .mem_data(dport_icb_resp_data), .data_req_done(dport_icb_resp_valid),
-    .mem_err(dport_icb_resp_err),
+    .data_req(data_mem_req), .data_req_ack(dport.req_ready),
+    .mem_data(dport.resp_data), .data_req_done(dport.resp_valid),
+    .mem_err(dport.resp_err),
     .rf_req_reg(rf_write_req), .csr_req_reg(csr_req),
     .mtip(mtip), .msip(msip), .meip(meip),
     .trap_conf(trap_conf), .flush_bus(flush_bus)

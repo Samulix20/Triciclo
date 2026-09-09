@@ -1,7 +1,6 @@
 
 /* verilator lint_off UNUSEDSIGNAL */
 
-`include "icb.svh"
 `include "axi4_lite.svh"
 
 module top
@@ -23,8 +22,8 @@ localparam logic [fast_net_len - 1:0][pma_conf_size - 1:0] fast_net_conf = {
 logic meip, mtip, msip;
 l64 mtime_val;
 
-`ICB_BUS(iport_bus, 32, 32, 4);
-`ICB_BUS(dport_bus, 32, 32, 4);
+icb_if #(.ADDR_W(32), .DATA_W(32), .OP_W(4)) iport_bus ();
+icb_if #(.ADDR_W(32), .DATA_W(32), .OP_W(4)) dport_bus ();
 
 triciclo  # (
     .HARDTID(0),
@@ -34,28 +33,28 @@ triciclo  # (
     // IRQs
     .mtip(mtip), .msip(0), .meip(meip),
     // Instruction
-    `ICB_BUS_CONNECT(iport, iport_bus),
+    .iport(iport_bus),
     // Data
-    `ICB_BUS_CONNECT(dport, dport_bus)
+    .dport(dport_bus)
 );
 
 // Instruction memory
 
-amo_mem main_instruction_memory (
+dpi_amo_mem main_instruction_memory (
     .clk(clk), .resetn(resetn),
-    `ICB_BUS_CONNECT(slv, iport_bus)
+    .slv(iport_bus)
 );
 
 // Fast Net
-`ICB_BUS_ARRAY(fast_net_array, fast_net_len, 32, 32, 4);
+icb_if #(.ADDR_W(32), .DATA_W(32), .OP_W(4)) fast_net_array [fast_net_len] ();
 
 icb_net #(
     .NSLAVES(fast_net_len),
     .PMA_CONF(fast_net_conf)
 ) fast_net (
     .clk(clk), .resetn(resetn),
-    `ICB_BUS_CONNECT(mst, dport_bus),
-    `ICB_BUS_CONNECT(slv, fast_net_array)
+    .mst(dport_bus),
+    .slv(fast_net_array)
 );
 
 logic [31:0] plic_pending;
@@ -69,28 +68,28 @@ end
 rv_plic plic (
     .clk(clk), .resetn(resetn),
     .pending(plic_pending), .meip(meip),
-    `ICB_BUS_CONNECT_ARRAY(slv, fast_net_array, 4)
+    .slv(fast_net_array[4])
 );
 
 rv_clint clint (
     .clk(clk), .resetn(resetn),
     .o_mtip(mtip), .o_msip(msip), .o_mtime(mtime_val),
-    `ICB_BUS_CONNECT_ARRAY(slv, fast_net_array, 3)
+    .slv(fast_net_array[3])
 );
 
 icb_dpi_slv general_mmio (
     .clk(clk), .resetn(resetn),
-    `ICB_BUS_CONNECT_ARRAY(slv, fast_net_array, 2)
+    .slv(fast_net_array[2])
 );
 
 dpi_sifive_uart sifive_uart (
     .clk(clk), .resetn(resetn), .irq(uart_irq),
-    `ICB_BUS_CONNECT_ARRAY(slv, fast_net_array, 1)
+    .slv(fast_net_array[1])
 );
 
-amo_mem main_data_memory (
+dpi_amo_mem main_data_memory (
     .clk(clk), .resetn(resetn),
-    `ICB_BUS_CONNECT_ARRAY(slv, fast_net_array, 0)
+    .slv(fast_net_array[0])
 );
 
 
