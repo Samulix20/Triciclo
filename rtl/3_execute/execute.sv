@@ -106,13 +106,15 @@ int_div int_div (
 );
 
 logic do_branch, ma_jump, pma_fault_jump;
+l32 branch_target;
 branch #(
     .PMA_REGS(PMA_REGS), .PMA_CONF(PMA_CONF)
 ) branch (
     .op1(reg_data[0]), .op2(reg_data[1]), .target(int_alu_out),
     .branch_op(dec_data.control.branch_op),
-    .do_branch(do_branch), 
-    .ma(ma_jump), .pma_fault(pma_fault_jump)
+    .do_branch(do_branch),
+    .ma(ma_jump), .pma_fault(pma_fault_jump),
+    .branch_target(branch_target)
 );
 
 
@@ -162,7 +164,7 @@ flush_bus_t trap_flush_bus;
 trap_unit trap_unit (
     .mtip(mtip), .msip(msip), .meip(meip), 
     .ma_jump(ma_jump), .pma_fault_jump(pma_fault_jump), 
-    .alu_result(int_alu_out),
+    .alu_result(branch_target),
     .dec_data(dec_data), .trap_conf(trap_conf),
     .trap(trap), .flush_bus(trap_flush_bus)
 );
@@ -182,7 +184,7 @@ always_comb begin
 
     // Flush Targets
     flush_bus.from = dec_data.pc;
-    flush_bus.to = int_alu_out;
+    flush_bus.to = branch_target;
     flush_bus.cause = 0;
     flush_bus.value = 0;
 
@@ -214,9 +216,10 @@ always_comb begin
             end
         end
 
-        MEM_WAIT: begin 
-            if (lsu_trap) begin 
+        MEM_WAIT: begin
+            if (lsu_trap) begin
                 exec_ready = 1;
+                flush_bus.op = FLUSH_TRAP;
                 flush_bus.to = trap_conf.mtvec;
                 flush_bus.value = lsu_trap_value;
                 flush_bus.cause = lsu_trap_cause;

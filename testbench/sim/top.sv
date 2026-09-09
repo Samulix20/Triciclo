@@ -16,7 +16,7 @@ localparam logic [fast_net_len - 1:0][pma_conf_size - 1:0] fast_net_conf = {
     32'hFF00_0000, 32'h0200_0000,
     32'hF000_0000, 32'h1000_0000,
     32'hF000_0000, 32'h2000_0000,
-    32'h8000_0000, 32'h8000_0000
+    32'hFC00_0000, 32'h8000_0000  // DRAM, 64 MiB (matches testbench.cpp's dpi_mem_size)
 };
 
 logic meip, mtip, msip;
@@ -42,7 +42,7 @@ triciclo  # (
 
 localparam int ifetch_net_len = 1;
 localparam logic [ifetch_net_len - 1:0][pma_conf_size - 1:0] ifetch_net_conf = {
-    32'h8000_0000, 32'h8000_0000
+    32'hFC00_0000, 32'h8000_0000  // DRAM, 64 MiB (matches testbench.cpp's dpi_mem_size)
 };
 
 icb_if #(.ADDR_W(32), .DATA_W(32), .OP_W(4)) ifetch_net_array [ifetch_net_len] ();

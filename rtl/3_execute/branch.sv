@@ -1,4 +1,6 @@
 
+/* verilator lint_off UNUSEDSIGNAL */
+
 module branch
 import triciclo_pkg::*;
 #(
@@ -7,7 +9,8 @@ import triciclo_pkg::*;
 ) (
     input l32 op1, op2, target,
     input branch_op_t branch_op,
-    output logic do_branch, ma, pma_fault
+    output logic do_branch, ma, pma_fault,
+    output l32 branch_target
 );
 
 logic eq, lt, ltu;
@@ -33,16 +36,20 @@ always_comb begin
     endcase
 end
 
+// JALR requires clearing bit 0 of the computed target
+// Harmless for JAL/conditional branches, whose immediates always have bit 0 = 0.
+assign branch_target = {target[31:1], 1'b0};
+
 // PMA Check
 logic internal_pma_fault;
 pma_check #(
     .PMA_REGS(PMA_REGS), .PMA_CONF(PMA_CONF)
 ) pma_check (
-    .addr(target), .fault(internal_pma_fault)
+    .addr(branch_target), .fault(internal_pma_fault)
 );
 
-always_comb begin 
-    ma = (do_branch && target[1:0] != 0);
+always_comb begin
+    ma = (do_branch && branch_target[1:0] != 0);
     pma_fault = (do_branch && internal_pma_fault);
 end
 

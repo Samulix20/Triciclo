@@ -168,7 +168,7 @@ void load_bin(const std::string& filename) {
     std::streamsize size = file.tellg();
     file.seekg(0, std::ios::beg);
 
-    dpi_mem_size = 50 * 1024 * 1024; // 50 MB size
+    dpi_mem_size = 64 * 1024 * 1024; // 64 MB size
     if (size > dpi_mem_size) {
         std::cerr << "ERROR: Binary file " << filename << " (" << size << " bytes) exceeds memory size (" << dpi_mem_size << " bytes)" << std::endl;
         exit(-1);

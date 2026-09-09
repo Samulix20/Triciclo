@@ -44,8 +44,8 @@ always_comb begin
             read_csr[8] = 1;     // RVI Base
             read_csr[12] = 1;    // M
         end
-        CSR_MSTATUS: begin 
-            read_csr[10:9] = mstatus.mpp;
+        CSR_MSTATUS: begin
+            read_csr[12:11] = mstatus.mpp;
             read_csr[8] = mstatus.spp;
             read_csr[7] = mstatus.mpie;
             read_csr[5] = mstatus.spie;
@@ -112,8 +112,8 @@ always_ff @(posedge clk) begin
 
         else if (csr_write_req.write_enable) begin
             case (csr_write_req.id)
-                CSR_MSTATUS: begin 
-                    mstatus.mpp <= priv_mode_t'(csr_write_req.data[10:9]);
+                CSR_MSTATUS: begin
+                    mstatus.mpp <= priv_mode_t'(csr_write_req.data[12:11]);
                     mstatus.spp <= csr_write_req.data[8];
                     mstatus.mpie <= csr_write_req.data[7];
                     mstatus.spie <= csr_write_req.data[5];

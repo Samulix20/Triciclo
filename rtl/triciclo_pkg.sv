@@ -147,7 +147,7 @@ typedef enum logic [1:0] {
 } priv_mode_t;
 
 typedef struct packed {
-    priv_mode_t mpp; // 10:9
+    priv_mode_t mpp; // 12:11
     logic spp;       // 8
     logic mpie;      // 7
     logic spie;      // 5
