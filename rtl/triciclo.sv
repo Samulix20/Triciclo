@@ -52,7 +52,9 @@ reg_file #(
     .write_request(rf_write_req)
 );
 
-csr_file csr_file (
+csr_file #(
+    .HARTID(HARDTID)
+) csr_file (
     .clk(clk), .resetn(resetn), .enable(enable), .instr_ret(instr_ret),
     .read_id(csr_read_id), .read_csr(csr_data),
     .csr_write_req(csr_req),

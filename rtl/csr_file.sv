@@ -2,7 +2,9 @@
 
 module csr_file
 import triciclo_pkg::*;
-(
+#(
+    parameter int HARTID = 0
+) (
     input logic clk, resetn, enable,
 
     input rv_csr_id_t read_id,
@@ -64,6 +66,7 @@ always_comb begin
         CSR_MCYCLEH: read_csr = mcycle[1];
         CSR_MINSTRET: read_csr = minstret[0];
         CSR_MINSTRETH: read_csr = minstret[1];
+        CSR_MHARTID: read_csr = HARTID;
         default: begin end
     endcase
 end
