@@ -361,6 +361,7 @@ typedef enum logic [3:0] {
     TRAP_LOAD_FAULT,
     TRAP_MISALIGNED_STORE,
     TRAP_STORE_FAULT,
+    TRAP_INSTR_FAULT,
     TRAP_ECALL,
     TRAP_EBREAK,
     TRAP_MRET,

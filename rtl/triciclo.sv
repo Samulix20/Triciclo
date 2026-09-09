@@ -72,6 +72,7 @@ fetch fetch (
 decode decode (
     .clk(clk), .resetn(resetn), .enable(enable),
     .instr(iport.resp_data), .instr_req_done(iport.resp_valid),
+    .instr_resp_err(iport.resp_err),
     .rf_read_ids(rf_read_ids), .rf_data(rf_data),
     .csr_id(csr_read_id), .csr_data(csr_data),
     .fetch_dec_buff(fetch_dec_buff), .dec_ready(dec_ready),

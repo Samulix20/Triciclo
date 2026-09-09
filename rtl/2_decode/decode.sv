@@ -6,6 +6,7 @@ import triciclo_pkg::*;
     // Instr bus response
     input rv_instr_t instr,
     input logic instr_req_done,
+    input logic instr_resp_err,
 
     // Register file
     output rv_reg_id_t [CORE_RF_NUM_READ - 1:0] rf_read_ids,
@@ -42,15 +43,16 @@ assign pc4 = pc + 4;
 logic fifo_flush;
 logic [IFIFO_COUNT_SIZE: 0] instr_fifo_count, instr_fifo_free;
 logic instr_fifo_get, instr_fifo_add;
-l32 instr_fifo_data;
+// {resp_err, instr} fifo format, store errors if buffered
+logic [32:0] instr_fifo_data;
 
 basic_fifo # (
-    .SIZE(IFIFO_SIZE)
-) 
+    .SIZE(IFIFO_SIZE), .DSIZE(33)
+)
 instr_fifo (
     .clk(clk), .resetn(resetn), .flush(fifo_flush),
     .nfree(instr_fifo_free), .count(instr_fifo_count),
-    .add(instr_fifo_add), .i_data(instr),
+    .add(instr_fifo_add), .i_data({instr_resp_err, instr}),
     .get(instr_fifo_get), .o_data(instr_fifo_data)
 );
 
@@ -65,13 +67,17 @@ logic instr_in_fifo;
 assign instr_in_fifo = (instr_fifo_count > 0);
 
 rv_instr_t instr_to_decode;
+logic instr_to_decode_fault;
 control_t decoded_ctrl;
 
-always_comb begin 
+always_comb begin
     // If there are pending instructions use those
-    if (instr_in_fifo) instr_to_decode = instr_fifo_data;
+    if (instr_in_fifo) {instr_to_decode_fault, instr_to_decode} = instr_fifo_data;
     // Use the one coming from the bus
-    else instr_to_decode = instr;
+    else begin
+        instr_to_decode = instr;
+        instr_to_decode_fault = instr_resp_err;
+    end
 end
 
 decoder decoder(
@@ -102,6 +108,9 @@ dec_exec_buff_t ibuff;
 always_comb begin 
     // Prepare decoded structure
     ibuff.control = decoded_ctrl;
+    // The fetched bits are untrustworthy if the bus reported an error, so
+    // override whatever decoder.sv made of them with the real cause.
+    if (instr_to_decode_fault) ibuff.control.trap_type = TRAP_INSTR_FAULT;
     ibuff.instr = instr_to_decode;
     ibuff.pc = pc;
     ibuff.pc4 = pc4;

@@ -33,7 +33,11 @@ always_comb begin
         trap = 1;
         flush_bus.cause = CAUSE_SOFT_IRQ;
     end
-    else if (ma_jump) begin 
+    else if (dec_data.control.trap_type == TRAP_INSTR_FAULT) begin
+        trap = 1;
+        flush_bus.cause = CAUSE_INSTRUCTION_ACCESS_FAULT;
+    end
+    else if (ma_jump) begin
         trap = 1;
         flush_bus.cause = CAUSE_MISALIGNED_FETCH;
         flush_bus.value = alu_result;

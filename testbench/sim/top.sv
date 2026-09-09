@@ -40,9 +40,25 @@ triciclo  # (
 
 // Instruction memory
 
+localparam int ifetch_net_len = 1;
+localparam logic [ifetch_net_len - 1:0][pma_conf_size - 1:0] ifetch_net_conf = {
+    32'h8000_0000, 32'h8000_0000
+};
+
+icb_if #(.ADDR_W(32), .DATA_W(32), .OP_W(4)) ifetch_net_array [ifetch_net_len] ();
+
+icb_net #(
+    .NSLAVES(ifetch_net_len),
+    .PMA_CONF(ifetch_net_conf)
+) ifetch_net (
+    .clk(clk), .resetn(resetn),
+    .mst(iport_bus),
+    .slv(ifetch_net_array)
+);
+
 dpi_amo_mem main_instruction_memory (
     .clk(clk), .resetn(resetn),
-    .slv(iport_bus)
+    .slv(ifetch_net_array[0])
 );
 
 // Fast Net
