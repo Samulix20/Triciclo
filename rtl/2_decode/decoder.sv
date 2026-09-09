@@ -146,19 +146,31 @@ always_comb begin
         end
 
         OPCODE_SYSTEM: begin
+            // funct3 100 is reserved
+            if (instr.funct3 == 'b100) begin
+                control.trap_type = TRAP_ILLEGAL;
+            end
             // PRIV subopcode
-            if (instr.funct3 == 'b000) begin 
+            else if (instr.funct3 == 'b000) begin
                 // MRET
                 if (instr[31:20] == 'b001100000010) begin
                     control.trap_type = TRAP_MRET;
                 end
                 // ECALL
-                else if (instr[31:20] == 'b000000000000) begin 
+                else if (instr[31:20] == 'b000000000000) begin
                     control.trap_type = TRAP_ECALL;
                 end
                 // EBREAK
-                else if (instr[31:20] == 'b000000000001) begin 
+                else if (instr[31:20] == 'b000000000001) begin
                     control.trap_type = TRAP_EBREAK;
+                end
+                // WFI implemented as NOP
+                else if (instr[31:20] == 'b000100000101) begin
+                    // NOP
+                end
+                // Unimplemented priv instr (SRET, SFENCE.VMA, ...)
+                else begin
+                    control.trap_type = TRAP_ILLEGAL;
                 end
             end
             // Zicsr
